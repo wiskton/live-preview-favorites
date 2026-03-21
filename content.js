@@ -1,9 +1,9 @@
 /* =========================================
    TWITCH + KICK FAVORITES + PREVIEW + DRAG
    MULTI-PLATFORM SUPPORT - FINAL 2025/2026
-   - Remove canais offline da barra de favoritos
-   - Sem estrela na lista customizada
-   - Viewers pré-carregados
+   - Remove offline channels from favorites bar
+   - No star in customized list
+   - Pre-loaded viewers
 ========================================= */
 
 let favorites = [];
@@ -18,13 +18,13 @@ let dragChannel = null;
 let dragPlatform = null;
 let dataLoaded = false;
 
-// ====================== INICIALIZAÇÃO ======================
+// ====================== INITIALIZATION ======================
 chrome.storage.local.get(["favorites", "kickFavorites"], async (r) => {
     favorites = r.favorites || [];
     kickFavorites = r.kickFavorites || [];
     dataLoaded = true;
 
-    // Pré-carrega viewers + status
+    // Pre-load viewers + status
     await preloadViewers();
 
     const tryRender = () => {
@@ -41,19 +41,19 @@ chrome.storage.local.get(["favorites", "kickFavorites"], async (r) => {
     tryRender();
 });
 
-// Pré-carrega viewers de todos os canais favoritados
+// Pre-load viewers from all favorited channels
 async function preloadViewers() {
     const twitchPromises = favorites.map(f => getViewer(f.channel, "twitch"));
     const kickPromises = kickFavorites.map(f => getViewer(f.channel, "kick"));
     await Promise.all([...twitchPromises, ...kickPromises]);
 }
 
-// Verifica se o canal está realmente transmitindo (online)
+// Check if the channel is actually streaming (online)
 async function isChannelLive(channel, platform) {
     const viewers = await getViewer(channel, platform);
 
-    // Lógica conservadora: considera online apenas se tem viewers reais
-    if (viewers === "LIVE") return false;     // decapi retorna "LIVE" quando offline
+    // Conservative logic: considers online only if it has real viewers
+    if (viewers === "LIVE") return false;     // decapi returns "LIVE" when offline
     if (viewers === "0" || viewers === "OFFLINE") return false;
     
     const num = parseInt(viewers, 10);
@@ -227,7 +227,7 @@ function initTemplate(platform = "twitch") {
     return true;
 }
 
-// ====================== RENDER FAVORITES (SÓ MOSTRA CANAIS ONLINE) ======================
+// ====================== RENDER FAVORITES (ONLY SHOWS ONLINE CHANNELS) ======================
 async function renderFavorites(platform = "twitch") {
     if (!initTemplate(platform)) return;
 
@@ -273,7 +273,7 @@ async function renderFavorites(platform = "twitch") {
 
     currentBox.querySelectorAll("[data-fav]").forEach(e => e.remove());
 
-    // Verifica quais canais estão online (em paralelo)
+    // Check which channels are online (in parallel)
     const onlineChecks = await Promise.all(
         list.map(async fav => ({
             fav,
@@ -283,7 +283,7 @@ async function renderFavorites(platform = "twitch") {
 
     const onlineList = onlineChecks.filter(r => r.online).map(r => r.fav);
 
-    // Se ninguém estiver online, esconde o box
+    // If no one is online, hide the box
     if (onlineList.length === 0) {
         currentBox.style.display = "none";
         return;
@@ -297,7 +297,21 @@ async function renderFavorites(platform = "twitch") {
         item.href = fav.url;
         item.draggable = true;
 
-        item.dataset.isCustomFavorite = "true"; // sem estrela
+        item.dataset.isCustomFavorite = "true"; // no star
+
+        // Remove any existing stars or buttons
+        item.querySelectorAll("span").forEach(s => {
+            if (s.textContent.includes("⭐") || s.textContent.includes("☆") || s.textContent.includes("✕") || s.dataset.star) {
+                s.remove();
+            }
+        });
+
+        // Guarantees that the item is a flex container
+        Object.assign(item.style, {
+            display: "flex",
+            alignItems: "center",
+            gap: "4px"
+        });
 
         item.ondragstart = () => { dragChannel = fav.channel; dragPlatform = platform; };
         item.ondragover = e => e.preventDefault();
@@ -311,6 +325,11 @@ async function renderFavorites(platform = "twitch") {
 
         const img = item.querySelector("img");
         if (img) {
+            Object.assign(img.style, {
+                flexShrink: 0,
+                width: "auto",
+                height: "100%"
+            });
             const p = platform === "twitch" ? "twitch" : "kick";
             img.src = `https://unavatar.io/${p}/${fav.channel}`;
             img.onerror = () => {
@@ -326,7 +345,18 @@ async function renderFavorites(platform = "twitch") {
         if (live) {
             const viewers = (platform === "twitch" ? viewerCache : kickViewerCache)[fav.channel] || "LIVE";
             live.textContent = formatViewer(viewers);
-            live.style.color = "white";
+            Object.assign(live.style, {
+                color: "white",
+                marginLeft: "auto",
+                marginRight: "4px",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100%",
+                minHeight: "28px"
+            });
             const dot = document.createElement("span");
             Object.assign(dot.style, {width:"6px", height:"6px", background:"red", borderRadius:"50%", display:"inline-block", marginRight:"6px"});
             live.prepend(dot);
@@ -335,11 +365,11 @@ async function renderFavorites(platform = "twitch") {
         const remove = document.createElement("span");
         remove.textContent = "✕";
         Object.assign(remove.style, {
-            marginLeft:"auto", marginRight:"6px", padding:"6px 12px", borderRadius:"8px",
+            padding:"6px 12px", borderRadius:"8px",
             border:"1px solid rgba(255,59,48,0.3)", fontSize:"14px", fontWeight:"600",
             background:"linear-gradient(135deg, rgba(255,59,48,0.08), rgba(255,87,34,0.06))",
             cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-            width:"28px", height:"28px", color:"rgba(255,59,48,0.6)"
+            width:"28px", height:"28px", color:"rgba(255,59,48,0.6)", flexShrink: 0
         });
 
         remove.onmouseenter = () => Object.assign(remove.style, {
@@ -384,7 +414,7 @@ function moveFav(drag, to, platform = "twitch") {
     updateAllStars();
 }
 
-// ====================== ESTRELAS ======================
+// ====================== STARS ======================
 function attachStar(a) {
     if (a.dataset.starReady || a.dataset.isCustomFavorite === "true") return;
 
@@ -405,7 +435,7 @@ function attachStar(a) {
         star.dataset.platform = platform;
         star.dataset.starReady = "1";
         star.textContent = getList(platform).some(f => f.channel.toLowerCase() === ch) ? "⭐" : "☆";
-        Object.assign(star.style, { marginLeft: "8px", cursor: "pointer", fontSize: "14px" });
+        Object.assign(star.style, { marginLeft: "8px", cursor: "pointer", fontSize: "14px", alignSelf: "flex-start" });
 
         star.onclick = e => {
             e.preventDefault(); e.stopPropagation();
@@ -432,6 +462,30 @@ function attachStar(a) {
     } catch {}
 }
 
+function attachStarToChannelPage() {
+    // Add star on channel page
+    try {
+        // Search for element with data-a-target="stream-info-card" or similar
+        const channelHeader = document.querySelector('[data-a-target="stream-info-card"]') || 
+                             document.querySelector('[class*="channel"]') ||
+                             document.querySelector('h1');
+        if (!channelHeader) return;
+
+        // Check if already added
+        if (document.querySelector("[data-channel-star]")) return;
+
+        const star = document.createElement("span");
+        star.dataset.channelStar = "true";
+        star.textContent = "☆";
+        star.style.fontSize = "20px";
+        star.style.cursor = "pointer";
+        star.style.marginLeft = "12px";
+
+        // Initialize star listeners
+        detect();
+    } catch {}
+}
+
 function detect() {
     document.querySelectorAll("a").forEach(a => {
         if (a.dataset.liveReady) return;
@@ -442,7 +496,7 @@ function detect() {
     });
 }
 
-// ====================== INTERVALOS ======================
+// ====================== INTERVALS ======================
 setInterval(() => {
     detect();
     if (dataLoaded) {

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Live Preview + Favorites",
   "version": "4.0",
-  "description": "Favoritar streamers e ver preview lateral ao passar o mouse.",
+  "description": "Favorite streamers and see a side preview when hovering over them.",
 
   "icons": {
     "16":  "icons/icon16.png",
