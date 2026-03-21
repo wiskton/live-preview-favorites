@@ -1,0 +1,29 @@
+.preview-container {
+    position: fixed;
+    width: 360px;
+    height: 210px;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    z-index: 999999;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    resize: both;
+}
+
+.preview-header {
+    height: 28px;
+    background: rgba(20,20,20,0.95);
+    color: white;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    cursor: move;
+    user-select: none;
+}
+
+.preview-container iframe {
+    width: 100%;
+    height: calc(100% - 28px);
+    border: none;
+}
