@@ -10,7 +10,7 @@ Uma extensão poderosa para navegadores Chromium que une o melhor da **Twitch** 
 
 ## 📸 Preview da Logo
 <p align="center">
-  <img src="https://seu-link-da-imagem-aqui.com/logo.png" width="300" alt="Twitch & Kick Hybrid Logo">
+  <img src="icons/icon128.png" width="300" alt="Twitch & Kick Hybrid Logo">
 </p>
 
 ---
@@ -51,6 +51,18 @@ Uma extensão poderosa para navegadores Chromium que une o melhor da **Twitch** 
 | `content.js` | Script que roda dentro da Twitch/Kick. |
 | `popup.html` | Interface que aparece ao clicar no ícone. |
 | `icons/` | Pasta contendo as logos em diferentes tamanhos. |
+
+---
+
+## 🧡 Apoie o Projeto (Donations)
+
+Se esta extensão é útil para você e você deseja apoiar o desenvolvimento contínuo, considere fazer uma doação em **Bitcoin**. Toda ajuda é muito bem-vinda!
+
+**Endereço Bitcoin (BTC):** `bc1qrluvyjkatg9lezrxewe2vqh4ew6z9vl7xw0s6k`
+
+<p align="left">
+  <img src="https://img.shields.io/badge/Donate-Bitcoin-orange?style=for-the-badge&logo=bitcoin" alt="Donate Bitcoin">
+</p>
 
 ---
 
