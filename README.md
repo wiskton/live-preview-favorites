@@ -1,41 +1,64 @@
-Live Preview + Favorites 📺⭐
-A browser extension designed to enhance your streaming experience on Twitch and Kick. It allows you to favorite your top streamers and see a live preview of their content simply by hovering over their links.
+# <img src="icons/icon128.png" align="center" width="40"> Live Preview + Favorites
 
-✨ Features
-Dual Platform Support: Fully compatible with both Twitch and Kick.
+[![Version](https://img.shields.io/badge/version-4.0-blueviolet.svg)](#)
+[![Manifest](https://img.shields.io/badge/manifest-v3-green.svg)](#)
+[![Platforms](https://img.shields.io/badge/platforms-Twitch%20%7C%20Kick-black.svg)](#)
 
-Live Hover Preview: See what's happening on a stream without leaving your current page.
+Uma extensão poderosa para navegadores Chromium que une o melhor da **Twitch** e da **Kick**. Favorite seus streamers e visualize o que está acontecendo na live apenas passando o mouse, sem trocar de aba.
 
-Favorites System: Keep your most-watched streamers at the top for quick access.
+---
 
-Clean UI: Minimalist design that integrates seamlessly into the original site's layout.
+## 📸 Preview da Logo
+<p align="center">
+  <img src="https://seu-link-da-imagem-aqui.com/logo.png" width="300" alt="Twitch & Kick Hybrid Logo">
+</p>
 
-🚀 Installation
-Download/Clone this repository to your local machine.
+---
 
-Open your browser (Chrome, Edge, or any Chromium-based browser).
+## ✨ Funcionalidades
 
-Go to chrome://extensions/.
+* **⚡ Live Hover Preview:** Passe o mouse sobre o link de um streamer e veja um preview em tempo real.
+* **⭐ Sistema de Favoritos:** Salve seus canais favoritos para acesso rápido no popup.
+* **🔄 Dual Platform:** Integração nativa com as APIs da Twitch e da Kick simultaneamente.
+* **🎨 UI Minimalista:** Design limpo que não interfere na navegação original.
 
-Enable "Developer mode" (usually a toggle in the top right corner).
+---
 
-Click on "Load unpacked" and select the folder containing the extension files.
+## 🛠️ Tecnologias Utilizadas
 
-🛠️ Technical Details
-Manifest Version: 3 (Latest standard).
+* **JavaScript (ES6+):** Lógica principal e manipulação de DOM.
+* **Chrome Extension API (V3):** Padrão mais moderno e seguro para extensões.
+* **Decapi.me & Unavatar.io:** Consumo de metadados e avatares.
+* **CSS3:** Estilização dos tooltips e da interface lateral.
 
-Permissions: Uses storage to save your favorite streamers locally.
+---
 
-Content Scripts: Injects content.js to detect stream links and handle hover events.
+## 🚀 Como Instalar (Modo Desenvolvedor)
 
-External APIs: * decapi.me & unavatar.io for fetching stream metadata and profile icons.
+1. Faça o **Download** ou **Clone** deste repositório.
+2. No seu navegador (Chrome, Edge, Brave), acesse: `chrome://extensions/`.
+3. Ative o **"Modo do desenvolvedor"** no canto superior direito.
+4. Clique em **"Carregar sem compactação"** (Load unpacked).
+5. Selecione a pasta onde os arquivos da extensão estão salvos.
 
-📂 Project Structure
-Plaintext
-├── icons/             # Extension icons (16x16, 32x32, 48x48, 128x128)
-├── content.js         # Core logic for hover previews and DOM manipulation
-├── popup.html         # The interface for the extension button
-├── manifest.json      # Extension configuration and permissions
-└── README.md          # Documentation
-🤝 Contributing
-Feel free to open issues or submit pull requests if you want to improve the preview speed or add new features!
+---
+
+## 📂 Estrutura do Projeto
+
+| Arquivo | Descrição |
+| :--- | :--- |
+| `manifest.json` | Configurações, permissões e metadados. |
+| `content.js` | Script que roda dentro da Twitch/Kick. |
+| `popup.html` | Interface que aparece ao clicar no ícone. |
+| `icons/` | Pasta contendo as logos em diferentes tamanhos. |
+
+---
+
+## 🤝 Contribuição
+
+Sinta-se à vontade para abrir uma **Issue** ou enviar um **Pull Request** para melhorias na velocidade do preview ou novas funcionalidades!
+
+---
+<p align="center">
+  Desenvolvido por wiskton
+</p>
