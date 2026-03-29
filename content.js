@@ -1,521 +1,552 @@
 /* =========================================
-   TWITCH + KICK FAVORITES + PREVIEW + DRAG
-   MULTI-PLATFORM SUPPORT - FINAL 2025/2026
-   - Remove offline channels from favorites bar
-   - No star in customized list
-   - Pre-loaded viewers
+   TWITCH FAVORITES — ONLY TWITCH
+   - Sidebar de favoritos acima dos Followed Channels
+   - Preview com thumbnail da live
+   - Botão favoritar na tela do streamer
+   - Categoria real por canal (sem piscar)
 ========================================= */
 
-let favorites = [];
-let kickFavorites = [];
+let favorites   = [];
 let viewerCache = {};
-let kickViewerCache = {};
-let favBox = null;
-let kickFavBox = null;
+let gameCacheTwitch = {};
+let favBox      = null;
 let templateItem = null;
-let kickTemplateItem = null;
-let dragChannel = null;
-let dragPlatform = null;
-let dataLoaded = false;
+let dragChannel  = null;
+let dataLoaded   = false;
+let renderBusy   = false;
 
-// ====================== INITIALIZATION ======================
-chrome.storage.local.get(["favorites", "kickFavorites"], async (r) => {
-    favorites = r.favorites || [];
-    kickFavorites = r.kickFavorites || [];
+// ====================== INIT ======================
+chrome.storage.local.get(["favorites"], async (r) => {
+    favorites  = r.favorites || [];
     dataLoaded = true;
-
-    // Pre-load viewers + status
-    await preloadViewers();
-
-    const tryRender = () => {
-        if (document.readyState === "loading") {
-            setTimeout(tryRender, 100);
-            return;
-        }
-        setTimeout(() => {
-            renderFavorites("twitch");
-            renderFavorites("kick");
-            updateAllStars();
-        }, 900);
-    };
-    tryRender();
+    await preloadAll();
+    waitAndRender();
 });
 
-// Pre-load viewers from all favorited channels
-async function preloadViewers() {
-    const twitchPromises = favorites.map(f => getViewer(f.channel, "twitch"));
-    const kickPromises = kickFavorites.map(f => getViewer(f.channel, "kick"));
-    await Promise.all([...twitchPromises, ...kickPromises]);
+async function preloadAll() {
+    await Promise.all([
+        ...favorites.map(f => getViewer(f.channel)),
+        ...favorites.map(f => getGame(f.channel)),
+    ]);
 }
 
-// Check if the channel is actually streaming (online)
-async function isChannelLive(channel, platform) {
-    const viewers = await getViewer(channel, platform);
-
-    // Conservative logic: considers online only if it has real viewers
-    if (viewers === "LIVE") return false;     // decapi returns "LIVE" when offline
-    if (viewers === "0" || viewers === "OFFLINE") return false;
-    
-    const num = parseInt(viewers, 10);
-    return !isNaN(num) && num > 0;
+function waitAndRender() {
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", () => setTimeout(renderFavorites, 800));
+    } else {
+        setTimeout(renderFavorites, 800);
+    }
 }
 
 function saveFav() {
-    chrome.storage.local.set({ favorites, kickFavorites });
+    chrome.storage.local.set({ favorites });
 }
 
-function formatViewer(n) {
+function formatViewers(n) {
     n = parseInt(n);
-    if (isNaN(n)) return "LIVE";
-    if (n < 1000) return n.toString();
-    if (n < 1000000) return (n / 1000).toFixed(1).replace(".0", "") + "k";
-    return (n / 1000000).toFixed(1).replace(".0", "") + "M";
+    if (isNaN(n) || n <= 0) return "LIVE";
+    if (n < 1000)    return n.toString();
+    if (n < 1000000) return (n / 1000).toFixed(1).replace(".0","") + "k";
+    return (n / 1000000).toFixed(1).replace(".0","") + "M";
 }
 
-function getList(platform) {
-    return platform === "twitch" ? favorites : kickFavorites;
+// ====================== API ======================
+async function getViewer(ch) {
+    if (viewerCache[ch] !== undefined) return viewerCache[ch];
+    try {
+        const r = await fetch(`https://decapi.me/twitch/viewercount/${ch}`);
+        const t = (await r.text()).trim();
+        viewerCache[ch] = t;
+        return t;
+    } catch { return "0"; }
 }
 
-function getTemplate(platform) {
-    return platform === "twitch" ? templateItem : kickTemplateItem;
+async function getGame(ch) {
+    if (gameCacheTwitch[ch]) return gameCacheTwitch[ch];
+    try {
+        const r = await fetch(`https://decapi.me/twitch/game/${ch}`);
+        const t = (await r.text()).trim();
+        if (t && !t.toLowerCase().includes("error")) {
+            gameCacheTwitch[ch] = t;
+            return t;
+        }
+    } catch {}
+    return "";
 }
 
-function setTemplate(platform, value) {
-    if (platform === "twitch") templateItem = value;
-    else kickTemplateItem = value;
+async function isLive(ch) {
+    const v = await getViewer(ch);
+    if (v === "LIVE" || v === "0" || v === "OFFLINE") return false;
+    const n = parseInt(v, 10);
+    return !isNaN(n) && n > 0;
 }
 
-function getBox(platform) {
-    return platform === "twitch" ? favBox : kickFavBox;
+// ====================== HELPERS SVG ======================
+function svgAvatar(ch, sz) {
+    const h = ch.split("").reduce((a,c) => c.charCodeAt(0)+((a<<5)-a), 0);
+    const cols = ["#6441a5","#e91e63","#2196f3","#4caf50","#ff9800","#f44336","#9c27b0","#00bcd4"];
+    const c = cols[Math.abs(h) % cols.length];
+    const i = (ch[0]||"?").toUpperCase();
+    return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${sz} ${sz}'%3E%3Crect fill='${encodeURIComponent(c)}' width='${sz}' height='${sz}'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' font-size='${Math.floor(sz/2)}' fill='white' font-family='Arial' font-weight='bold'%3E${i}%3C/text%3E%3C/svg%3E`;
 }
-
-function setBox(platform, value) {
-    if (platform === "twitch") favBox = value;
-    else kickFavBox = value;
+function svgThumb(ch) {
+    const h = ch.split("").reduce((a,c) => c.charCodeAt(0)+((a<<5)-a), 0);
+    const cols = ["#6441a5","#e91e63","#2196f3","#4caf50","#ff9800","#f44336","#9c27b0","#00bcd4"];
+    const c = cols[Math.abs(h) % cols.length];
+    const i = (ch[0]||"?").toUpperCase();
+    return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 360'%3E%3Crect fill='${encodeURIComponent(c)}' width='640' height='360'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' font-size='120' fill='white' font-family='Arial' font-weight='bold' opacity='0.5'%3E${i}%3C/text%3E%3C/svg%3E`;
 }
-
-function updateAllStars() {
-    document.querySelectorAll('span[data-star]').forEach(star => {
-        const ch = star.dataset.star?.toLowerCase();
-        const platform = star.dataset.platform;
-        if (!ch || !platform) return;
-        const list = getList(platform);
-        star.innerText = list.some(f => f.channel.toLowerCase() === ch) ? "⭐" : "☆";
-    });
-    detect();
+function getTwitchThumb(ch) {
+    const ts = Math.floor(Date.now() / 30000);
+    return `https://static-cdn.jtvnw.net/previews-ttv/live_user_${ch.toLowerCase()}-640x360.jpg?t=${ts}`;
 }
 
 // ====================== PREVIEW ======================
 const preview = document.createElement("div");
 Object.assign(preview.style, {
-    position: "fixed", width: "640px", height: "360px", border: "none",
-    borderRadius: "14px", boxShadow: "0 10px 30px rgba(0,0,0,0.6)",
-    display: "none", pointerEvents: "none", zIndex: "999999",
-    background: "#000", overflow: "hidden"
+    position:"fixed", width:"640px", height:"auto", border:"none",
+    borderRadius:"14px", boxShadow:"0 10px 30px rgba(0,0,0,0.75)",
+    display:"none", pointerEvents:"none", zIndex:"999999",
+    background:"#0e0e10", overflow:"hidden", flexDirection:"column"
 });
 document.body.appendChild(preview);
 
-let previewIframe = null;
-let previewChannel = null;
-let previewPlatform = null;
+const previewImg = document.createElement("img");
+Object.assign(previewImg.style, {
+    width:"640px", height:"360px", objectFit:"cover",
+    display:"block", borderRadius:"14px 14px 0 0", transition:"opacity 0.2s"
+});
+preview.appendChild(previewImg);
+
+const previewInfo = document.createElement("div");
+Object.assign(previewInfo.style, {
+    display:"flex", alignItems:"center", gap:"10px",
+    padding:"10px 14px", background:"rgba(18,18,24,0.98)",
+    borderRadius:"0 0 14px 14px"
+});
+preview.appendChild(previewInfo);
+
+const previewAvatar = document.createElement("img");
+Object.assign(previewAvatar.style, {
+    width:"36px", height:"36px", borderRadius:"50%",
+    objectFit:"cover", flexShrink:"0",
+    border:"2px solid rgba(255,255,255,0.15)"
+});
+previewInfo.appendChild(previewAvatar);
+
+const previewText = document.createElement("div");
+Object.assign(previewText.style, { display:"flex", flexDirection:"column", minWidth:"0", flex:"1" });
+previewInfo.appendChild(previewText);
+
+const previewName = document.createElement("span");
+Object.assign(previewName.style, {
+    color:"#fff", fontWeight:"700", fontSize:"14px",
+    whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"
+});
+previewText.appendChild(previewName);
+
+const previewSub = document.createElement("span");
+Object.assign(previewSub.style, { color:"#adadb8", fontSize:"12px", marginTop:"2px" });
+previewText.appendChild(previewSub);
+
+const previewBadge = document.createElement("span");
+Object.assign(previewBadge.style, {
+    marginLeft:"auto", background:"#eb0400", color:"#fff",
+    fontSize:"11px", fontWeight:"700", padding:"3px 8px",
+    borderRadius:"6px", letterSpacing:"0.5px", flexShrink:"0"
+});
+previewBadge.textContent = "🔴 LIVE";
+previewInfo.appendChild(previewBadge);
+
+let previewCh = null, previewHide = null;
 
 document.addEventListener("mouseover", e => {
     const a = e.target.closest("a");
     if (!a) return;
+    const m = a.href?.match(/twitch\.tv\/([^\/?#]+)/i);
+    if (!m) return;
+    const ch = m[1].toLowerCase();
+    if (ch === previewCh) return;
+    previewCh = ch;
+    clearTimeout(previewHide);
 
-    const twitchMatch = a.href?.match(/twitch\.tv\/([^\/?]+)/i);
-    const kickMatch = a.href?.match(/kick\.com\/([^\/?#]+)/i);
-    if (!twitchMatch && !kickMatch) return;
+    previewName.textContent = ch;
+    previewAvatar.src = `https://unavatar.io/twitch/${ch}`;
+    previewAvatar.onerror = () => { previewAvatar.src = svgAvatar(ch, 36); };
 
-    const ch = twitchMatch ? twitchMatch[1] : kickMatch[1];
-    const platform = twitchMatch ? "twitch" : "kick";
+    const v = viewerCache[ch];
+    previewSub.textContent = (v && !isNaN(parseInt(v))) ? `${formatViewers(v)} viewers` : "...";
+    if (!v) getViewer(ch).then(vv => {
+        if (previewCh === ch) previewSub.textContent = !isNaN(parseInt(vv)) ? `${formatViewers(vv)} viewers` : "LIVE";
+    });
 
-    if (ch === previewChannel && platform === previewPlatform) return;
-    previewChannel = ch;
-    previewPlatform = platform;
+    previewImg.style.opacity = "0.4";
+    previewImg.onerror = () => { previewImg.src = svgThumb(ch); previewImg.style.opacity = "1"; };
+    previewImg.onload  = () => { previewImg.style.opacity = "1"; };
+    previewImg.src = getTwitchThumb(ch);
 
     const rect = a.getBoundingClientRect();
-    preview.innerHTML = "";
-
-    previewIframe = document.createElement("iframe");
-    Object.assign(previewIframe.style, { width: "100%", height: "100%", border: "none" });
-    previewIframe.allowFullscreen = true;
-    previewIframe.allow = "autoplay; fullscreen; encrypted-media";
-    previewIframe.title = "Stream Preview";
-
-    previewIframe.src = platform === "twitch"
-        ? `https://player.twitch.tv/?channel=${ch}&parent=${location.hostname}&muted=true&quality=160p`
-        : `https://player.kick.com/${ch}?muted=true`;
-
-    preview.appendChild(previewIframe);
-
-    let left = rect.right + 16;
-    let top = rect.top - 40;
-    if (left + 640 > window.innerWidth) left = rect.left - 656;
-    if (top + 360 > window.innerHeight) top = window.innerHeight - 380;
+    let left = rect.right + 16, top = rect.top - 40;
+    if (left + 640 > window.innerWidth)  left = rect.left - 656;
+    if (top  + 420 > window.innerHeight) top  = window.innerHeight - 440;
     if (top < 20) top = 20;
-
     preview.style.left = left + "px";
-    preview.style.top = top + "px";
-    preview.style.display = "block";
+    preview.style.top  = top  + "px";
+    preview.style.display = "flex";
 });
 
 document.addEventListener("mouseout", e => {
     if (!e.relatedTarget || !e.relatedTarget.closest("a")) {
-        preview.style.display = "none";
-        preview.innerHTML = "";
-        previewChannel = null;
-        previewPlatform = null;
+        previewHide = setTimeout(() => { preview.style.display = "none"; previewCh = null; }, 120);
     }
 });
 
-// ====================== VIEWERS ======================
-async function getViewer(ch, platform = "twitch") {
-    const cache = platform === "twitch" ? viewerCache : kickViewerCache;
-    if (cache[ch]) return cache[ch];
-
-    try {
-        const url = platform === "twitch"
-            ? `https://decapi.me/twitch/viewercount/${ch}`
-            : `https://kick.com/api/v2/channels/${ch}`;
-        const r = await fetch(url);
-        const t = platform === "twitch"
-            ? await r.text()
-            : (await r.json())?.viewer_count?.toString() || "0";
-        cache[ch] = t;
-        return t;
-    } catch {
-        return "0";
-    }
-}
-
 // ====================== TEMPLATE ======================
-function initTemplate(platform = "twitch") {
-    if ((platform === "twitch" && templateItem) || (platform === "kick" && kickTemplateItem)) return true;
-
-    let sidebar = null;
-    if (platform === "twitch") {
-        sidebar = document.querySelector('[aria-label="Followed Channels"]') ||
-                  document.querySelector('[class*="sidebar"]') ||
-                  document.querySelector('aside');
-    } else {
-        sidebar = document.querySelector('aside') ||
-                  document.querySelector('[class*="sidebar"]') ||
-                  document.querySelector('nav');
-        if (!sidebar) {
-            const candidates = document.querySelectorAll('div, section, nav, aside');
-            for (const el of candidates) {
-                if (el.textContent.toLowerCase().includes('following') &&
-                    el.querySelectorAll('a[href^="/"]').length > 3) {
-                    sidebar = el;
-                    break;
-                }
-            }
-        }
-    }
-
-    if (!sidebar) return false;
-    const first = sidebar.querySelector('a[href^="/"]');
-    if (!first) return false;
-
-    const template = first.cloneNode(true);
-    template.querySelectorAll("span").forEach(s => {
-        if (s.textContent.includes("⭐") || s.textContent.includes("✕")) s.remove();
-    });
-
-    setTemplate(platform, template);
-    return true;
+// Não usamos mais clone — itens montados do zero igual ao Followed Channels
+function initTemplate() {
+    // Só verifica se a sidebar existe
+    return !!(document.querySelector('[aria-label="Followed Channels"]') || document.querySelector('aside'));
 }
 
-// ====================== RENDER FAVORITES (ONLY SHOWS ONLINE CHANNELS) ======================
-async function renderFavorites(platform = "twitch") {
-    if (!initTemplate(platform)) return;
+// ====================== RENDER SIDEBAR ======================
+async function renderFavorites() {
+    if (renderBusy) return;
+    renderBusy = true;
+    try { await _render(); } finally { renderBusy = false; }
+}
 
-    const list = getList(platform);
-    let sidebar = null;
-    let insertBefore = null;
-
-    if (platform === "twitch") {
-        sidebar = document.querySelector('[aria-label="Followed Channels"]') || document.querySelector('aside');
-    } else {
-        sidebar = document.querySelector('aside') || document.querySelector('[class*="sidebar"]') || document.querySelector('nav');
-        if (sidebar) {
-            const els = sidebar.querySelectorAll('*');
-            for (const el of els) {
-                const txt = el.textContent?.toLowerCase().trim();
-                if (txt === 'following' || txt?.includes('following')) {
-                    insertBefore = el;
-                    break;
-                }
-            }
-        }
-    }
-
+async function _render() {
+    if (!initTemplate()) return;
+    const sidebar = document.querySelector('[aria-label="Followed Channels"]') || document.querySelector('aside');
     if (!sidebar) return;
 
-    let currentBox = getBox(platform);
-    if (!currentBox) {
-        currentBox = document.createElement("div");
-        const label = document.createElement("div");
-        label.textContent = platform === "twitch" ? "FAVORITES" : "KICK FAVORITES";
-        Object.assign(label.style, { color: "white", fontWeight: "700", fontSize: "15px", padding: "12px" });
-        currentBox.appendChild(label);
-
-        if (platform === "twitch") {
-            sidebar.prepend(currentBox);
-        } else if (insertBefore) {
-            sidebar.insertBefore(currentBox, insertBefore);
-        } else {
-            sidebar.prepend(currentBox);
-        }
-        setBox(platform, currentBox);
+    // Criar box uma vez só
+    if (!favBox || !document.contains(favBox)) {
+        favBox = document.createElement("div");
+        favBox.dataset.favoritesBox = "twitch";
+        const header = document.createElement("div");
+        header.textContent = "FAVORITES";
+        Object.assign(header.style, {
+            color:"#bf94ff", fontWeight:"700", fontSize:"11px",
+            padding:"16px 16px 8px", letterSpacing:"1.5px", textTransform:"uppercase"
+        });
+        favBox.appendChild(header);
+        sidebar.prepend(favBox);
     }
 
-    currentBox.querySelectorAll("[data-fav]").forEach(e => e.remove());
+    // Remover itens antigos (preservar header)
+    favBox.querySelectorAll("[data-fav]").forEach(el => el.remove());
 
-    // Check which channels are online (in parallel)
-    const onlineChecks = await Promise.all(
-        list.map(async fav => ({
-            fav,
-            online: await isChannelLive(fav.channel, platform)
-        }))
-    );
+    // Checar quem está online (viewers já em cache da preloadAll)
+    const checks = await Promise.all(favorites.map(async fav => ({
+        fav,
+        online: await isLive(fav.channel)
+    })));
+    const onlineList = checks.filter(c => c.online).map(c => c.fav);
 
-    const onlineList = onlineChecks.filter(r => r.online).map(r => r.fav);
+    if (onlineList.length === 0) { favBox.style.display = "none"; return; }
+    favBox.style.display = "block";
 
-    // If no one is online, hide the box
-    if (onlineList.length === 0) {
-        currentBox.style.display = "none";
-        return;
-    }
-    currentBox.style.display = "block";
+    // Buscar categorias em paralelo — TODOS de uma vez antes de renderizar
+    // Assim nenhum elemento fica sem categoria e não há atualização assíncrona piscando
+    const games = {};
+    await Promise.all(onlineList.map(async fav => {
+        games[fav.channel] = await getGame(fav.channel);
+    }));
 
+    // Montar itens do zero com HTML igual ao Followed Channels
     onlineList.forEach(fav => {
-        const template = getTemplate(platform);
-        const item = template.cloneNode(true);
+        const v    = viewerCache[fav.channel] || "";
+        const game = games[fav.channel] || "";
+
+        // Wrapper <a> — mesmo estilo do Followed Channels
+        const item = document.createElement("a");
         item.dataset.fav = fav.channel;
-        item.href = fav.url;
+        item.href = `https://www.twitch.tv/${fav.channel}`;
         item.draggable = true;
-
-        item.dataset.isCustomFavorite = "true"; // no star
-
-        // Remove any existing stars or buttons
-        item.querySelectorAll("span").forEach(s => {
-            if (s.textContent.includes("⭐") || s.textContent.includes("☆") || s.textContent.includes("✕") || s.dataset.star) {
-                s.remove();
-            }
-        });
-
-        // Guarantees that the item is a flex container
+        item.dataset.isCustomFavorite = "true";
         Object.assign(item.style, {
-            display: "flex",
-            alignItems: "center",
-            gap: "4px"
+            display:"flex", alignItems:"center",
+            padding:"5px 8px 5px 4px", textDecoration:"none",
+            borderRadius:"6px", cursor:"grab",
+            transition:"background 0.15s, box-shadow 0.15s, transform 0.15s",
+            gap:"0", minHeight:"42px", boxSizing:"border-box",
+            width:"100%", position:"relative",
+            userSelect:"none"
         });
 
-        item.ondragstart = () => { dragChannel = fav.channel; dragPlatform = platform; };
-        item.ondragover = e => e.preventDefault();
+        item.onmouseenter = () => {
+            item.style.background  = "rgba(255,255,255,0.07)";
+            handle.style.opacity   = "1";
+        };
+        item.onmouseleave = () => {
+            item.style.background  = "transparent";
+            handle.style.opacity   = "0";
+        };
+
+        item.ondragstart = e => {
+            dragChannel = fav.channel;
+            item.style.opacity   = "0.45";
+            item.style.transform = "scale(0.97)";
+            item.style.cursor    = "grabbing";
+            e.dataTransfer.effectAllowed = "move";
+        };
+        item.ondragend = () => {
+            item.style.opacity   = "1";
+            item.style.transform = "scale(1)";
+            item.style.cursor    = "grab";
+            // limpar highlight de todos
+            favBox.querySelectorAll("[data-fav]").forEach(el => {
+                el.style.boxShadow = "none";
+                el.style.background = "transparent";
+            });
+        };
+        item.ondragover = e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            // highlight do destino
+            if (dragChannel !== fav.channel) {
+                item.style.boxShadow = "inset 0 2px 0 0 #9147ff";
+                item.style.background = "rgba(145,71,255,0.10)";
+            }
+        };
+        item.ondragleave = () => {
+            item.style.boxShadow = "none";
+            item.style.background = "transparent";
+        };
         item.ondrop = e => {
             e.preventDefault();
-            if (dragPlatform === platform) moveFav(dragChannel, fav.channel, platform);
+            item.style.boxShadow = "none";
+            item.style.background = "transparent";
+            if (dragChannel !== fav.channel) moveFav(dragChannel, fav.channel);
         };
 
-        const name = item.querySelector('[data-a-target="side-nav-title"]') || item.querySelector('span');
-        if (name) name.textContent = fav.channel;
+        // Handle de drag — ícone ⠿ visível só no hover
+        const handle = document.createElement("span");
+        handle.textContent = "⠿";
+        handle.title = "Arrastar para reordenar";
+        Object.assign(handle.style, {
+            fontSize:"14px", color:"rgba(255,255,255,0.3)",
+            flexShrink:"0", width:"14px", textAlign:"center",
+            opacity:"0", transition:"opacity 0.15s",
+            marginRight:"6px", cursor:"grab", lineHeight:"1"
+        });
+        item.appendChild(handle);
 
-        const img = item.querySelector("img");
-        if (img) {
-            Object.assign(img.style, {
-                flexShrink: 0,
-                width: "auto",
-                height: "100%"
+        // Avatar — 30x30 arredondado (igual Twitch sidebar)
+        const img = document.createElement("img");
+        img.src = `https://unavatar.io/twitch/${fav.channel}`;
+        img.onerror = () => { img.src = svgAvatar(fav.channel, 30); };
+        Object.assign(img.style, {
+            width:"30px", height:"30px", borderRadius:"50%",
+            objectFit:"cover", flexShrink:"0", marginRight:"10px"
+        });
+        item.appendChild(img);
+
+        // Bloco central: nome + categoria
+        const info = document.createElement("div");
+        Object.assign(info.style, {
+            display:"flex", flexDirection:"column", justifyContent:"center",
+            flex:"1", minWidth:"0", overflow:"hidden"
+        });
+
+        const nameDiv = document.createElement("div");
+        nameDiv.textContent = fav.channel;
+        Object.assign(nameDiv.style, {
+            color:"#efeff1", fontSize:"13px", fontWeight:"600",
+            whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+            lineHeight:"1.3"
+        });
+        info.appendChild(nameDiv);
+
+        if (game) {
+            const gameDiv = document.createElement("div");
+            gameDiv.textContent = game;
+            Object.assign(gameDiv.style, {
+                color:"#adadb8", fontSize:"12px", fontWeight:"400",
+                whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+                lineHeight:"1.3"
             });
-            const p = platform === "twitch" ? "twitch" : "kick";
-            img.src = `https://unavatar.io/${p}/${fav.channel}`;
-            img.onerror = () => {
-                const hash = fav.channel.split('').reduce((h, c) => c.charCodeAt(0) + ((h << 5) - h), 0);
-                const colors = ['#6441a5','#e91e63','#2196f3','#4caf50','#ff9800','#f44336','#9c27b0','#00bcd4'];
-                const color = colors[Math.abs(hash) % colors.length];
-                const initial = fav.channel[0]?.toUpperCase() || '?';
-                img.src = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect fill='${encodeURIComponent(color)}' width='128' height='128'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' font-size='64' fill='white' font-family='Arial' font-weight='bold'%3E${initial}%3C/text%3E%3C/svg%3E`;
-            };
+            info.appendChild(gameDiv);
         }
 
-        const live = item.querySelector('[data-a-target="side-nav-live-status"]');
-        if (live) {
-            const viewers = (platform === "twitch" ? viewerCache : kickViewerCache)[fav.channel] || "LIVE";
-            live.textContent = formatViewer(viewers);
-            Object.assign(live.style, {
-                color: "white",
-                marginLeft: "auto",
-                marginRight: "4px",
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "100%",
-                minHeight: "28px"
-            });
-            const dot = document.createElement("span");
-            Object.assign(dot.style, {width:"6px", height:"6px", background:"red", borderRadius:"50%", display:"inline-block", marginRight:"6px"});
-            live.prepend(dot);
-        }
+        item.appendChild(info);
 
-        const remove = document.createElement("span");
-        remove.textContent = "✕";
-        Object.assign(remove.style, {
-            padding:"6px 12px", borderRadius:"8px",
-            border:"1px solid rgba(255,59,48,0.3)", fontSize:"14px", fontWeight:"600",
-            background:"linear-gradient(135deg, rgba(255,59,48,0.08), rgba(255,87,34,0.06))",
-            cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-            width:"28px", height:"28px", color:"rgba(255,59,48,0.6)", flexShrink: 0
+        // Viewers com ponto vermelho (alinhado à direita)
+        const liveWrap = document.createElement("div");
+        Object.assign(liveWrap.style, {
+            display:"flex", alignItems:"center", gap:"4px",
+            flexShrink:"0", marginLeft:"6px"
         });
 
-        remove.onmouseenter = () => Object.assign(remove.style, {
-            background:"linear-gradient(135deg, rgba(255,59,48,0.25), rgba(255,87,34,0.2))",
-            borderColor:"rgba(255,59,48,0.8)", color:"rgba(255,59,48,0.95)", transform:"scale(1.1)"
+        const dot = document.createElement("span");
+        Object.assign(dot.style, {
+            width:"6px", height:"6px", background:"#ff0000",
+            borderRadius:"50%", display:"inline-block", flexShrink:"0"
         });
 
-        remove.onmouseleave = () => Object.assign(remove.style, {
-            background:"linear-gradient(135deg, rgba(255,59,48,0.08), rgba(255,87,34,0.06))",
-            borderColor:"rgba(255,59,48,0.3)", color:"rgba(255,59,48,0.6)", transform:"scale(1)"
+        const viewersSpan = document.createElement("span");
+        viewersSpan.textContent = formatViewers(v);
+        Object.assign(viewersSpan.style, {
+            color:"#adadb8", fontSize:"12px", whiteSpace:"nowrap"
         });
 
-        remove.onclick = e => {
+        liveWrap.appendChild(dot);
+        liveWrap.appendChild(viewersSpan);
+        item.appendChild(liveWrap);
+
+        // Botão remover ✕
+        const rm = document.createElement("span");
+        rm.textContent = "✕";
+        Object.assign(rm.style, {
+            borderRadius:"4px", fontSize:"11px", fontWeight:"700",
+            border:"1px solid rgba(255,59,48,0.3)", cursor:"pointer",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            width:"20px", height:"20px", minWidth:"20px",
+            color:"rgba(255,59,48,0.55)", flexShrink:"0",
+            background:"transparent", transition:"all 0.15s",
+            marginLeft:"6px"
+        });
+        rm.onmouseenter = () => Object.assign(rm.style, {
+            background:"rgba(255,59,48,0.2)", borderColor:"rgba(255,59,48,0.9)",
+            color:"#ff3b30", transform:"scale(1.1)"
+        });
+        rm.onmouseleave = () => Object.assign(rm.style, {
+            background:"transparent", borderColor:"rgba(255,59,48,0.3)",
+            color:"rgba(255,59,48,0.55)", transform:"scale(1)"
+        });
+        rm.onclick = e => {
             e.preventDefault(); e.stopPropagation();
-            remove.style.transform = "scale(0.85)"; remove.style.opacity = "0";
+            item.style.opacity = "0";
+            item.style.transition = "opacity 0.15s";
             setTimeout(() => {
-                if (platform === "twitch") favorites = favorites.filter(f => f.channel !== fav.channel);
-                else kickFavorites = kickFavorites.filter(f => f.channel !== fav.channel);
+                favorites = favorites.filter(f => f.channel !== fav.channel);
                 saveFav();
-                updateAllStars();
-                renderFavorites(platform);
-                setTimeout(updateAllStars, 300);
+                renderFavorites();
             }, 150);
         };
+        item.appendChild(rm);
 
-        item.appendChild(remove);
-        currentBox.appendChild(item);
+        favBox.appendChild(item);
     });
-
-    setTimeout(updateAllStars, 100);
 }
 
-function moveFav(drag, to, platform = "twitch") {
-    const list = getList(platform);
-    const fromIndex = list.findIndex(f => f.channel === drag);
-    const toIndex = list.findIndex(f => f.channel === to);
-    if (fromIndex < 0 || toIndex < 0) return;
-    const item = list.splice(fromIndex, 1)[0];
-    list.splice(toIndex, 0, item);
+function moveFav(from, to) {
+    const fi = favorites.findIndex(f => f.channel === from);
+    const ti = favorites.findIndex(f => f.channel === to);
+    if (fi < 0 || ti < 0) return;
+    const [item] = favorites.splice(fi, 1);
+    favorites.splice(ti, 0, item);
     saveFav();
-    renderFavorites(platform);
-    updateAllStars();
+    renderFavorites();
 }
 
-// ====================== STARS ======================
-function attachStar(a) {
-    if (a.dataset.starReady || a.dataset.isCustomFavorite === "true") return;
-
+// ====================== BOTÃO FAVORITAR NA LIVE ======================
+function attachFavButton() {
     try {
-        const url = new URL(a.href);
-        const isTwitch = url.hostname.includes("twitch.tv") || url.hostname.includes("twitch");
-        const isKick = url.hostname.includes("kick.com") || url.hostname.includes("kick");
-        if (!isTwitch && !isKick) return;
+        if (!location.href.includes("twitch.tv")) return;
+        if (document.querySelector("[data-channel-fav-btn]")) return;
 
-        const platform = isTwitch ? "twitch" : "kick";
-        const ch = url.pathname.split("/").filter(p => p)[0]?.toLowerCase();
+        const ch = location.pathname.split("/").filter(p => p &&
+            !["videos","clips","about","schedule","squad","moderator","u","directory","search"].includes(p.toLowerCase())
+        )[0]?.toLowerCase();
         if (!ch) return;
 
-        a.dataset.starReady = "1";
+        const allBtns = [
+            ...document.querySelectorAll('[data-a-target="unfollow-button"]'),
+            ...document.querySelectorAll('[data-a-target="follow-button"]'),
+            ...document.querySelectorAll('button[data-a-target*="follow"]'),
+        ];
+        const anchor = allBtns.find(b =>
+            b.closest('[class*="channel-header"]') ||
+            b.closest('[class*="ChannelHeader"]')  ||
+            b.closest('[class*="channel-info"]')   ||
+            b.closest('[class*="StreamInfo"]')     ||
+            b.closest('[class*="action-bar"]')     ||
+            b.closest('[class*="bottom-bar"]')
+        ) || allBtns[0];
+        if (!anchor) return;
 
-        const star = document.createElement("span");
-        star.dataset.star = ch;
-        star.dataset.platform = platform;
-        star.dataset.starReady = "1";
-        star.textContent = getList(platform).some(f => f.channel.toLowerCase() === ch) ? "⭐" : "☆";
-        Object.assign(star.style, { marginLeft: "8px", cursor: "pointer", fontSize: "14px", alignSelf: "flex-start" });
+        const sz = anchor.offsetHeight || 36;
+        const btn = document.createElement("button");
+        btn.dataset.channelFavBtn = "true";
 
-        star.onclick = e => {
-            e.preventDefault(); e.stopPropagation();
-            const list = getList(platform);
-            const exists = list.some(f => f.channel.toLowerCase() === ch);
+        const icon  = document.createElement("span");
+        icon.style.cssText = "font-size:13px;line-height:1;";
+        const label = document.createElement("span");
+        btn.appendChild(icon);
+        btn.appendChild(label);
 
-            if (exists) {
-                if (platform === "twitch") favorites = favorites.filter(f => f.channel.toLowerCase() !== ch);
-                else kickFavorites = kickFavorites.filter(f => f.channel.toLowerCase() !== ch);
-            } else {
-                list.unshift({ channel: ch, url: a.href });
-            }
-            saveFav();
-            updateAllStars();
-            renderFavorites(platform);
-            renderFavorites(platform === "twitch" ? "kick" : "twitch");
-            setTimeout(updateAllStars, 300);
+        const applyStyle = (fav) => {
+            Object.assign(btn.style, {
+                display:"inline-flex", alignItems:"center", justifyContent:"center",
+                gap:"6px", height: sz + "px", padding:"0 10px",
+                border: fav ? "1.5px solid rgba(145,71,255,0.5)" : "none",
+                borderRadius:"4px",
+                background: fav ? "rgba(145,71,255,0.18)" : "#9147ff",
+                color: fav ? "#bf94ff" : "#fff",
+                fontSize:"13px", fontWeight:"700",
+                cursor:"pointer", flexShrink:"0", marginRight:"6px",
+                outline:"none", whiteSpace:"nowrap",
+                transition:"background 0.15s, transform 0.1s",
+                fontFamily:"inherit"
+            });
+            icon.textContent  = fav ? "⭐" : "☆";
+            label.textContent = fav ? "Favorito" : "Favoritar";
+            btn.title         = fav ? "Remover dos favoritos" : "Adicionar aos favoritos";
         };
 
-        star.onmouseenter = () => Object.assign(star.style, { transform: "scale(1.2)", filter: "brightness(1.3)" });
-        star.onmouseleave = () => Object.assign(star.style, { transform: "scale(1)", filter: "brightness(1)" });
+        applyStyle(favorites.some(f => f.channel.toLowerCase() === ch));
 
-        a.appendChild(star);
+        btn.onmouseenter = () => {
+            btn.style.transform = "scale(1.04)";
+            btn.style.background = favorites.some(f=>f.channel.toLowerCase()===ch)
+                ? "rgba(145,71,255,0.30)" : "#772ce8";
+        };
+        btn.onmouseleave = () => {
+            btn.style.transform = "scale(1)";
+            btn.style.background = favorites.some(f=>f.channel.toLowerCase()===ch)
+                ? "rgba(145,71,255,0.18)" : "#9147ff";
+        };
+
+        btn.onclick = e => {
+            e.preventDefault(); e.stopPropagation();
+            const on = favorites.some(f=>f.channel.toLowerCase()===ch);
+            if (on) { favorites = favorites.filter(f=>f.channel.toLowerCase()!==ch); }
+            else    { favorites.unshift({ channel:ch, url:`https://www.twitch.tv/${ch}` }); }
+            saveFav(); renderFavorites();
+            applyStyle(!on);
+            btn.style.transform = "scale(0.92)";
+            setTimeout(()=>{ btn.style.transform="scale(1)"; }, 150);
+        };
+
+        anchor.insertAdjacentElement("beforebegin", btn);
     } catch {}
-}
-
-function attachStarToChannelPage() {
-    // Add star on channel page
-    try {
-        // Search for element with data-a-target="stream-info-card" or similar
-        const channelHeader = document.querySelector('[data-a-target="stream-info-card"]') || 
-                             document.querySelector('[class*="channel"]') ||
-                             document.querySelector('h1');
-        if (!channelHeader) return;
-
-        // Check if already added
-        if (document.querySelector("[data-channel-star]")) return;
-
-        const star = document.createElement("span");
-        star.dataset.channelStar = "true";
-        star.textContent = "☆";
-        star.style.fontSize = "20px";
-        star.style.cursor = "pointer";
-        star.style.marginLeft = "12px";
-
-        // Initialize star listeners
-        detect();
-    } catch {}
-}
-
-function detect() {
-    document.querySelectorAll("a").forEach(a => {
-        if (a.dataset.liveReady) return;
-        if (a.href && a.offsetHeight > 20 && (a.href.includes("twitch.tv") || a.href.includes("kick.com"))) {
-            a.dataset.liveReady = "1";
-            attachStar(a);
-        }
-    });
 }
 
 // ====================== INTERVALS ======================
+// Render a cada 30s — não a cada 1.5s — para evitar piscar
 setInterval(() => {
-    detect();
-    if (dataLoaded) {
-        renderFavorites("twitch");
-        renderFavorites("kick");
-        updateAllStars();
-    }
-    attachStarToChannelPage();
-}, 1500);
+    if (!dataLoaded) return;
+    // Invalidar viewers para re-fetch, mantendo games em cache
+    favorites.forEach(f => { delete viewerCache[f.channel]; });
+    renderFavorites();
+    attachFavButton();
+}, 30000);
 
-document.addEventListener("DOMContentLoaded", attachStarToChannelPage);
-window.addEventListener("load", attachStarToChannelPage);
+// Attach do botão a cada 2s (só quando ainda não existe)
+setInterval(() => { attachFavButton(); }, 2000);
 
+// Navegação SPA
 let lastUrl = location.href;
 setInterval(() => {
-    if (location.href !== lastUrl) {
-        lastUrl = location.href;
-        const old = document.querySelector("[data-channel-star]");
-        if (old) old.parentElement?.removeChild(old);
-        setTimeout(attachStarToChannelPage, 500);
-    }
-}, 1000);
+    if (location.href === lastUrl) return;
+    lastUrl = location.href;
+    document.querySelector("[data-channel-fav-btn]")?.remove();
+    templateItem = null;
+    favBox = null;
+    setTimeout(() => {
+        if (dataLoaded) renderFavorites();
+        attachFavButton();
+    }, 1000);
+}, 500);

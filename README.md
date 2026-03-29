@@ -54,6 +54,14 @@ A powerful extension for Chromium browsers that combines the best of **Twitch** 
 
 ---
 
+## ✅ TODO / Checklist
+
+### 🟢 Kick
+
+- [ ] not support
+
+---
+
 ## 🧡 Support the Project (Donations)
 
 If this extension is useful to you and you wish to support its continuous development, please consider making a **Bitcoin** donation. Any help is greatly appreciated!
