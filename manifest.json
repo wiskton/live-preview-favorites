@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Live Preview + Favorites",
   "version": "4.0",
-  "description": "Favorite streamers and see a side preview when hovering over them.",
+  "description": "Hover any streamer link to preview their live thumbnail. Save favorites to your sidebar and instantly spot reruns by title.",
 
   "icons": {
     "16":  "icons/icon16.png",

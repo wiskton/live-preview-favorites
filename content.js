@@ -14,6 +14,7 @@
 let favorites   = [];
 let viewerCache = {};
 let gameCacheTwitch = {};
+let titleCache  = {};
 let dragChannel  = null;
 let dataLoaded   = false;
 let renderBusy   = false;
@@ -30,6 +31,7 @@ async function preloadAll() {
     await Promise.all([
         ...favorites.map(f => getViewer(f.channel)),
         ...favorites.map(f => getGame(f.channel)),
+        ...favorites.map(f => getTitle(f.channel)),
     ]);
 }
 
@@ -75,6 +77,21 @@ async function getGame(ch) {
         }
     } catch {}
     return "";
+}
+
+async function getTitle(ch) {
+    if (titleCache[ch] !== undefined) return titleCache[ch];
+    try {
+        const r = await fetch(`https://decapi.me/twitch/title/${ch}`);
+        const t = (await r.text()).trim();
+        titleCache[ch] = (!t || t.toLowerCase().includes("error")) ? "" : t;
+        return titleCache[ch];
+    } catch { return ""; }
+}
+
+function isRerun(ch) {
+    const title = (titleCache[ch] || "").toUpperCase();
+    return title.includes("RERUN");
 }
 
 async function isLive(ch) {
@@ -296,15 +313,18 @@ async function _render() {
     if (onlineList.length === 0) { favBox.style.display = "none"; return; }
     favBox.style.display = "block";
 
-    // Buscar categorias em paralelo antes de renderizar (evita piscar)
+    // Buscar categorias e títulos em paralelo antes de renderizar (evita piscar)
     const games = {};
+    const titles = {};
     await Promise.all(onlineList.map(async fav => {
-        games[fav.channel] = await getGame(fav.channel);
+        games[fav.channel]  = await getGame(fav.channel);
+        titles[fav.channel] = await getTitle(fav.channel);
     }));
 
     onlineList.forEach(fav => {
-        const v    = viewerCache[fav.channel] || "";
-        const game = games[fav.channel] || "";
+        const v     = viewerCache[fav.channel] || "";
+        const game  = games[fav.channel] || "";
+        const rerun = (titles[fav.channel] || "").toUpperCase().includes("RERUN");
 
         const item = document.createElement("a");
         item.dataset.fav = fav.channel;
@@ -394,10 +414,24 @@ async function _render() {
         const nameDiv = document.createElement("div");
         nameDiv.textContent = fav.channel;
         Object.assign(nameDiv.style, {
-            color:"#efeff1", fontSize:"13px", fontWeight:"600",
+            color: rerun ? "#ff4444" : "#efeff1",
+            fontSize:"13px", fontWeight:"600",
             whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
             lineHeight:"1.3"
         });
+        if (rerun) {
+            nameDiv.title = "Reprise (RERUN)";
+            const badge = document.createElement("span");
+            badge.textContent = " RERUN";
+            Object.assign(badge.style, {
+                fontSize:"9px", fontWeight:"700", color:"#ff4444",
+                background:"rgba(255,68,68,0.15)", borderRadius:"3px",
+                padding:"1px 4px", marginLeft:"4px",
+                verticalAlign:"middle", letterSpacing:"0.5px",
+                border:"1px solid rgba(255,68,68,0.3)"
+            });
+            nameDiv.appendChild(badge);
+        }
         info.appendChild(nameDiv);
 
         if (game) {
@@ -587,8 +621,9 @@ function attachFavButton() {
 // Invalida TODOS os caches (viewers + games) para refletir lives que encerraram
 setInterval(() => {
     if (!dataLoaded) return;
-    viewerCache    = {};  // força re-fetch de viewers
+    viewerCache     = {};  // força re-fetch de viewers
     gameCacheTwitch = {}; // força re-fetch de categorias (podem ter mudado)
+    titleCache      = {}; // força re-fetch de títulos (rerun pode ter mudado)
     renderFavorites();
 }, 5 * 60 * 1000); // 5 minutos
 
