@@ -4,13 +4,16 @@
    - Preview com thumbnail da live
    - Botão favoritar na tela do streamer
    - Categoria real por canal (sem piscar)
+   
+   FIXES:
+   - Bug duplicação da barra corrigido (busca por data-attr no DOM sempre)
+   - Bug sidebar direita corrigido (selector mais específico + fallback seguro)
+   - Atualização a cada 5 minutos (antes 30s só invalidava viewers)
 ========================================= */
 
 let favorites   = [];
 let viewerCache = {};
 let gameCacheTwitch = {};
-let favBox      = null;
-let templateItem = null;
 let dragChannel  = null;
 let dataLoaded   = false;
 let renderBusy   = false;
@@ -32,9 +35,9 @@ async function preloadAll() {
 
 function waitAndRender() {
     if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", () => setTimeout(renderFavorites, 800));
+        document.addEventListener("DOMContentLoaded", () => setTimeout(renderFavorites, 1200));
     } else {
-        setTimeout(renderFavorites, 800);
+        setTimeout(renderFavorites, 1200);
     }
 }
 
@@ -201,11 +204,69 @@ document.addEventListener("mouseout", e => {
     }
 });
 
-// ====================== TEMPLATE ======================
-// Não usamos mais clone — itens montados do zero igual ao Followed Channels
-function initTemplate() {
-    // Só verifica se a sidebar existe
-    return !!(document.querySelector('[aria-label="Followed Channels"]') || document.querySelector('aside'));
+// ====================== ENCONTRAR SIDEBAR ESQUERDA ======================
+// FIX: Evita pegar a sidebar direita (chat, raid, etc.)
+// A sidebar esquerda do Twitch tem aria-label="Followed Channels" ou
+// é o primeiro <nav> / primeiro <aside> à esquerda da tela (x < 200px)
+function getLeftSidebar() {
+    // Tentativa 1: nav com aria-label específico
+    const followedNav = document.querySelector('[aria-label="Followed Channels"]');
+    if (followedNav) {
+        // Sobe até o container scrollável da sidebar esquerda
+        return followedNav.closest("nav") || followedNav.closest("aside") || followedNav.parentElement;
+    }
+
+    // Tentativa 2: nav que contém "Followed Channels" por texto
+    const allNavs = document.querySelectorAll("nav");
+    for (const nav of allNavs) {
+        if (nav.textContent.includes("Followed Channels") || nav.textContent.includes("Canais seguidos")) {
+            return nav;
+        }
+    }
+
+    // Tentativa 3: aside/nav posicionado na esquerda da tela (x < 300px)
+    const candidates = [...document.querySelectorAll("aside, nav")];
+    for (const el of candidates) {
+        const rect = el.getBoundingClientRect();
+        if (rect.left < 300 && rect.width > 50 && rect.width < 400 && rect.height > 300) {
+            return el;
+        }
+    }
+
+    return null;
+}
+
+// ====================== OBTER OU CRIAR favBox (sem duplicar) ======================
+// FIX: Sempre busca no DOM pelo data-attribute antes de criar um novo.
+// Isso evita duplicação em re-renders e navegação SPA.
+function getOrCreateFavBox(sidebar) {
+    // Remover duplicatas: se houver mais de um, manter só o primeiro
+    const all = document.querySelectorAll("[data-favorites-box='twitch']");
+    if (all.length > 1) {
+        for (let i = 1; i < all.length; i++) all[i].remove();
+    }
+
+    // Verificar se o existente ainda está dentro da sidebar correta
+    if (all.length === 1 && sidebar.contains(all[0])) {
+        return all[0];
+    }
+
+    // Se existe mas está fora da sidebar (ex: sidebar errada após SPA), remover
+    if (all.length === 1) all[0].remove();
+
+    // Criar novo
+    const box = document.createElement("div");
+    box.dataset.favoritesBox = "twitch";
+
+    const header = document.createElement("div");
+    header.textContent = "FAVORITES";
+    Object.assign(header.style, {
+        color:"#bf94ff", fontWeight:"700", fontSize:"11px",
+        padding:"16px 16px 8px", letterSpacing:"1.5px", textTransform:"uppercase"
+    });
+    box.appendChild(header);
+    sidebar.prepend(box);
+    return box;
 }
 
 // ====================== RENDER SIDEBAR ======================
@@ -216,28 +277,16 @@ async function renderFavorites() {
 }
 
 async function _render() {
-    if (!initTemplate()) return;
-    const sidebar = document.querySelector('[aria-label="Followed Channels"]') || document.querySelector('aside');
+    // FIX: Aguarda a sidebar esquerda aparecer — com timeout máximo de 8s
+    const sidebar = await waitForSidebar(8000);
     if (!sidebar) return;
 
-    // Criar box uma vez só
-    if (!favBox || !document.contains(favBox)) {
-        favBox = document.createElement("div");
-        favBox.dataset.favoritesBox = "twitch";
-        const header = document.createElement("div");
-        header.textContent = "FAVORITES";
-        Object.assign(header.style, {
-            color:"#bf94ff", fontWeight:"700", fontSize:"11px",
-            padding:"16px 16px 8px", letterSpacing:"1.5px", textTransform:"uppercase"
-        });
-        favBox.appendChild(header);
-        sidebar.prepend(favBox);
-    }
+    const favBox = getOrCreateFavBox(sidebar);
 
     // Remover itens antigos (preservar header)
     favBox.querySelectorAll("[data-fav]").forEach(el => el.remove());
 
-    // Checar quem está online (viewers já em cache da preloadAll)
+    // Checar quem está online (invalida viewers para re-fetch)
     const checks = await Promise.all(favorites.map(async fav => ({
         fav,
         online: await isLive(fav.channel)
@@ -247,19 +296,16 @@ async function _render() {
     if (onlineList.length === 0) { favBox.style.display = "none"; return; }
     favBox.style.display = "block";
 
-    // Buscar categorias em paralelo — TODOS de uma vez antes de renderizar
-    // Assim nenhum elemento fica sem categoria e não há atualização assíncrona piscando
+    // Buscar categorias em paralelo antes de renderizar (evita piscar)
     const games = {};
     await Promise.all(onlineList.map(async fav => {
         games[fav.channel] = await getGame(fav.channel);
     }));
 
-    // Montar itens do zero com HTML igual ao Followed Channels
     onlineList.forEach(fav => {
         const v    = viewerCache[fav.channel] || "";
         const game = games[fav.channel] || "";
 
-        // Wrapper <a> — mesmo estilo do Followed Channels
         const item = document.createElement("a");
         item.dataset.fav = fav.channel;
         item.href = `https://www.twitch.tv/${fav.channel}`;
@@ -295,7 +341,6 @@ async function _render() {
             item.style.opacity   = "1";
             item.style.transform = "scale(1)";
             item.style.cursor    = "grab";
-            // limpar highlight de todos
             favBox.querySelectorAll("[data-fav]").forEach(el => {
                 el.style.boxShadow = "none";
                 el.style.background = "transparent";
@@ -304,7 +349,6 @@ async function _render() {
         item.ondragover = e => {
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
-            // highlight do destino
             if (dragChannel !== fav.channel) {
                 item.style.boxShadow = "inset 0 2px 0 0 #9147ff";
                 item.style.background = "rgba(145,71,255,0.10)";
@@ -321,7 +365,6 @@ async function _render() {
             if (dragChannel !== fav.channel) moveFav(dragChannel, fav.channel);
         };
 
-        // Handle de drag — ícone ⠿ visível só no hover
         const handle = document.createElement("span");
         handle.textContent = "⠿";
         handle.title = "Arrastar para reordenar";
@@ -333,7 +376,6 @@ async function _render() {
         });
         item.appendChild(handle);
 
-        // Avatar — 30x30 arredondado (igual Twitch sidebar)
         const img = document.createElement("img");
         img.src = `https://unavatar.io/twitch/${fav.channel}`;
         img.onerror = () => { img.src = svgAvatar(fav.channel, 30); };
@@ -343,7 +385,6 @@ async function _render() {
         });
         item.appendChild(img);
 
-        // Bloco central: nome + categoria
         const info = document.createElement("div");
         Object.assign(info.style, {
             display:"flex", flexDirection:"column", justifyContent:"center",
@@ -372,7 +413,6 @@ async function _render() {
 
         item.appendChild(info);
 
-        // Viewers com ponto vermelho (alinhado à direita)
         const liveWrap = document.createElement("div");
         Object.assign(liveWrap.style, {
             display:"flex", alignItems:"center", gap:"4px",
@@ -395,7 +435,6 @@ async function _render() {
         liveWrap.appendChild(viewersSpan);
         item.appendChild(liveWrap);
 
-        // Botão remover ✕
         const rm = document.createElement("span");
         rm.textContent = "✕";
         Object.assign(rm.style, {
@@ -428,6 +467,24 @@ async function _render() {
         item.appendChild(rm);
 
         favBox.appendChild(item);
+    });
+}
+
+// FIX: Espera a sidebar esquerda aparecer no DOM (SPAs carregam async)
+function waitForSidebar(timeout = 8000) {
+    return new Promise(resolve => {
+        const found = getLeftSidebar();
+        if (found) { resolve(found); return; }
+
+        const deadline = Date.now() + timeout;
+        const obs = new MutationObserver(() => {
+            const s = getLeftSidebar();
+            if (s) { obs.disconnect(); resolve(s); return; }
+            if (Date.now() > deadline) { obs.disconnect(); resolve(null); }
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+        // Timeout de segurança
+        setTimeout(() => { obs.disconnect(); resolve(getLeftSidebar()); }, timeout);
     });
 }
 
@@ -525,28 +582,34 @@ function attachFavButton() {
 }
 
 // ====================== INTERVALS ======================
-// Render a cada 30s — não a cada 1.5s — para evitar piscar
+
+// FIX: Atualização completa a cada 5 minutos
+// Invalida TODOS os caches (viewers + games) para refletir lives que encerraram
 setInterval(() => {
     if (!dataLoaded) return;
-    // Invalidar viewers para re-fetch, mantendo games em cache
-    favorites.forEach(f => { delete viewerCache[f.channel]; });
+    viewerCache    = {};  // força re-fetch de viewers
+    gameCacheTwitch = {}; // força re-fetch de categorias (podem ter mudado)
     renderFavorites();
-    attachFavButton();
-}, 30000);
+}, 5 * 60 * 1000); // 5 minutos
 
 // Attach do botão a cada 2s (só quando ainda não existe)
 setInterval(() => { attachFavButton(); }, 2000);
 
-// Navegação SPA
+// Navegação SPA — re-renderiza após mudança de URL
 let lastUrl = location.href;
 setInterval(() => {
     if (location.href === lastUrl) return;
     lastUrl = location.href;
+
+    // Remove botão da live anterior
     document.querySelector("[data-channel-fav-btn]")?.remove();
-    templateItem = null;
-    favBox = null;
+
+    // FIX: Remove o favBox existente do DOM para forçar recriação
+    // na sidebar correta da nova página (não apenas nullifica a variável)
+    document.querySelectorAll("[data-favorites-box='twitch']").forEach(el => el.remove());
+
     setTimeout(() => {
         if (dataLoaded) renderFavorites();
         attachFavButton();
-    }, 1000);
+    }, 1200); // aguarda SPA carregar a nova sidebar
 }, 500);
