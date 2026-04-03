@@ -187,8 +187,22 @@ let previewCh = null, previewHide = null;
 document.addEventListener("mouseover", e => {
     const a = e.target.closest("a");
     if (!a) return;
+
+    // Restringe o preview para a sidebar nativa (container, seguidos, recomendados) e nosso box de favoritos.
+    const isSidebarLink = a.closest('[data-a-target="side-nav-container"]') || 
+                          a.closest('[data-favorites-box="twitch"]') ||
+                          a.closest('[data-test-selector="followed-channel"]') ||
+                          a.closest('[data-test-selector="recommended-channel"]');
+
+    if (!isSidebarLink) return;
+
     const m = a.href?.match(/twitch\.tv\/([^\/?#]+)/i);
     if (!m) return;
+
+    // Garante que é um link de canal e não de uma página de sistema (como busca ou categorias)
+    const reserved = ["directory", "videos", "clips", "search", "settings", "u", "moderator", "about", "schedule", "squad"];
+    if (reserved.includes(m[1].toLowerCase())) return;
+
     const ch = m[1].toLowerCase();
     if (ch === previewCh) return;
     previewCh = ch;
@@ -646,26 +660,33 @@ function attachFavButton() {
         btn.dataset.channelFavBtn = "true";
 
         const icon  = document.createElement("span");
-        icon.style.cssText = "font-size:13px;line-height:1;";
+        icon.style.cssText = "font-size:16px; line-height:0; display:flex; align-items:center;";
         const label = document.createElement("span");
         btn.appendChild(icon);
         btn.appendChild(label);
 
         const applyStyle = (fav) => {
             Object.assign(btn.style, {
-                display:"inline-flex", alignItems:"center", justifyContent:"center",
-                gap:"6px", height: sz + "px", padding:"0 10px",
-                border: fav ? "1.5px solid rgba(145,71,255,0.5)" : "none",
-                borderRadius:"4px",
-                background: fav ? "rgba(145,71,255,0.18)" : "#9147ff",
-                color: fav ? "#bf94ff" : "#fff",
-                fontSize:"13px", fontWeight:"700",
-                cursor:"pointer", flexShrink:"0", marginRight:"6px",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "32px",
+                width: "52px",
+                padding: "0",
+                border: "none",
+                borderRadius: "20px",
+                background: fav ? "rgba(255, 255, 255, 0.15)" : "#9147ff",
+                color: "#fff",
+                cursor: "pointer", flexShrink: "0",
+                marginRight: "10px", 
                 outline:"none", whiteSpace:"nowrap",
-                transition:"background 0.15s, transform 0.1s",
-                fontFamily:"inherit"
+                transition: "background-color 200ms ease, transform 100ms ease",
+                fontFamily: "Inter, Roobert, 'Helvetica Neue', Helvetica, Arial, sans-serif"
             });
-            icon.textContent  = fav ? "⭐" : "☆";
+            icon.innerHTML = fav
+                ? `<svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2l2.5 6.5H19l-5 4 2 7.5-6-4.5-6 4.5 2-7.5-5-4h6.5L10 2z"/></svg>`
+                : `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 2l2.5 6.5H19l-5 4 2 7.5-6-4.5-6 4.5 2-7.5-5-4h6.5L10 2z"/></svg>`;
+            label.style.display = "none";
             label.textContent = fav ? "Favorito" : "Favoritar";
             btn.title         = fav ? "Remover dos favoritos" : "Adicionar aos favoritos";
         };
@@ -674,13 +695,13 @@ function attachFavButton() {
 
         btn.onmouseenter = () => {
             btn.style.transform = "scale(1.04)";
-            btn.style.background = favorites.some(f=>f.channel.toLowerCase()===ch)
-                ? "rgba(145,71,255,0.30)" : "#772ce8";
+            const isFav = favorites.some(f=>f.channel.toLowerCase()===ch);
+            btn.style.background = isFav ? "rgba(255, 255, 255, 0.25)" : "#772ce8";
         };
         btn.onmouseleave = () => {
             btn.style.transform = "scale(1)";
-            btn.style.background = favorites.some(f=>f.channel.toLowerCase()===ch)
-                ? "rgba(145,71,255,0.18)" : "#9147ff";
+            const isFav = favorites.some(f=>f.channel.toLowerCase()===ch);
+            btn.style.background = isFav ? "rgba(255, 255, 255, 0.15)" : "#9147ff";
         };
 
         btn.onclick = e => {
@@ -694,7 +715,14 @@ function attachFavButton() {
             setTimeout(()=>{ btn.style.transform="scale(1)"; }, 150);
         };
 
-        anchor.insertAdjacentElement("beforebegin", btn);
+        // Cria um wrapper seguindo o sistema de design (ScCore) da Twitch
+        const wrapper = document.createElement("div");
+        wrapper.className = "Layout-sc-1xcs6mc-0 gWaIYG";
+        wrapper.appendChild(btn);
+
+        // Localiza o container do botão de seguir para inserir o nosso wrapper antes dele
+        const target = anchor.closest('.Layout-sc-1xcs6mc-0') || anchor;
+        target.insertAdjacentElement("beforebegin", wrapper);
     } catch {}
 }
 
