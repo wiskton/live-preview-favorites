@@ -18,14 +18,18 @@ let titleCache  = {};
 let dragChannel  = null;
 let dataLoaded   = false;
 let renderBusy   = false;
+let favCollapsed = false; // estado do toggle expandir/recolher
 
 // ====================== INIT ======================
-chrome.storage.local.get(["favorites"], async (r) => {
-    favorites  = r.favorites || [];
-    dataLoaded = true;
+chrome.storage.local.get(["favorites", "favCollapsed"], async (r) => {
+    favorites    = r.favorites || [];
+    favCollapsed = r.favCollapsed || false;
+    dataLoaded   = true;
     await preloadAll();
     waitAndRender();
 });
+
+watchNativeSidebarToggle();
 
 async function preloadAll() {
     await Promise.all([
@@ -254,36 +258,108 @@ function getLeftSidebar() {
 }
 
 // ====================== OBTER OU CRIAR favBox (sem duplicar) ======================
-// FIX: Sempre busca no DOM pelo data-attribute antes de criar um novo.
-// Isso evita duplicação em re-renders e navegação SPA.
 function getOrCreateFavBox(sidebar) {
-    // Remover duplicatas: se houver mais de um, manter só o primeiro
     const all = document.querySelectorAll("[data-favorites-box='twitch']");
     if (all.length > 1) {
         for (let i = 1; i < all.length; i++) all[i].remove();
     }
-
-    // Verificar se o existente ainda está dentro da sidebar correta
     if (all.length === 1 && sidebar.contains(all[0])) {
         return all[0];
     }
-
-    // Se existe mas está fora da sidebar (ex: sidebar errada após SPA), remover
     if (all.length === 1) all[0].remove();
 
-    // Criar novo
     const box = document.createElement("div");
     box.dataset.favoritesBox = "twitch";
 
     const header = document.createElement("div");
-    header.textContent = "FAVORITES";
-    Object.assign(header.style, {
+    header.dataset.favHeader = "true";
+    Object.assign(header.style, { padding:"16px 16px 8px" });
+
+    const headerLabel = document.createElement("span");
+    headerLabel.textContent = "FAVORITES";
+    Object.assign(headerLabel.style, {
         color:"#bf94ff", fontWeight:"700", fontSize:"11px",
-        padding:"16px 16px 8px", letterSpacing:"1.5px", textTransform:"uppercase"
+        letterSpacing:"1.5px", textTransform:"uppercase"
     });
+
+    header.appendChild(headerLabel);
     box.appendChild(header);
     sidebar.prepend(box);
     return box;
+}
+
+// ====================== DETECTAR BOTÃO NATIVO DO TWITCH ======================
+function watchNativeSidebarToggle() {
+    const COLLAPSE_LABELS = ["recolher", "collapse", "fechar", "close nav", "hide"];
+    const EXPAND_LABELS   = ["expandir", "expand",   "abrir",  "open nav",  "show"];
+
+    document.addEventListener("click", e => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        const label = (btn.getAttribute("aria-label") || btn.title || "").toLowerCase().trim();
+
+        const isCollapse = COLLAPSE_LABELS.some(l => label.includes(l));
+        const isExpand   = EXPAND_LABELS.some(l => label.includes(l));
+        if (!isCollapse && !isExpand) return;
+
+        // Aguarda animação do Twitch terminar para medir a largura real
+        setTimeout(() => {
+            const box = document.querySelector("[data-favorites-box='twitch']");
+            if (!box) return;
+            const sidebar = box.closest("nav, aside");
+            const collapsed = sidebar ? sidebar.getBoundingClientRect().width < 100 : isCollapse;
+            if (favCollapsed !== collapsed) {
+                favCollapsed = collapsed;
+                chrome.storage.local.set({ favCollapsed });
+                applyCollapsedMode(box);
+            }
+        }, 350);
+    }, true);
+}
+
+// ====================== COLLAPSED MODE ======================
+function applyCollapsedMode(box) {
+    const header = box.querySelector("[data-fav-header]") || box.firstElementChild;
+
+    if (favCollapsed) {
+        if (header) header.style.display = "none";
+
+        box.querySelectorAll("[data-fav]").forEach(item => {
+            item.draggable = false;
+            item.style.padding        = "3px 4px";
+            item.style.justifyContent = "center";
+            item.style.cursor         = "pointer";
+            item.style.minHeight      = "36px";
+
+            item.querySelectorAll("[data-handle]").forEach(el  => { el.style.display = "none"; });
+            item.querySelectorAll("[data-info]").forEach(el    => { el.style.display = "none"; });
+            item.querySelectorAll("[data-livewrap]").forEach(el => { el.style.display = "none"; });
+            item.querySelectorAll("[data-rm]").forEach(el      => { el.style.display = "none"; });
+
+            const img = item.querySelector("img");
+            if (img) img.style.margin = "0";
+        });
+
+    } else {
+        if (header) header.style.display = "";
+
+        box.querySelectorAll("[data-fav]").forEach(item => {
+            item.draggable = true;
+            item.style.padding        = "5px 8px 5px 4px";
+            item.style.justifyContent = "";
+            item.style.cursor         = "grab";
+            item.style.minHeight      = "42px";
+
+            // Restaura display correto de cada elemento (inline, flex, etc.)
+            item.querySelectorAll("[data-handle]").forEach(el   => { el.style.display = ""; });        // inline (span)
+            item.querySelectorAll("[data-info]").forEach(el     => { el.style.display = "flex"; });    // flex (div)
+            item.querySelectorAll("[data-livewrap]").forEach(el => { el.style.display = "flex"; });    // flex (div)
+            item.querySelectorAll("[data-rm]").forEach(el       => { el.style.display = "flex"; });    // flex (span)
+
+            const img = item.querySelector("img");
+            if (img) img.style.margin = "0 10px 0 0";
+        });
+    }
 }
 
 // ====================== RENDER SIDEBAR ======================
@@ -386,6 +462,7 @@ async function _render() {
         };
 
         const handle = document.createElement("span");
+        handle.dataset.handle = "true";
         handle.textContent = "⠿";
         handle.title = "Arrastar para reordenar";
         Object.assign(handle.style, {
@@ -406,6 +483,7 @@ async function _render() {
         item.appendChild(img);
 
         const info = document.createElement("div");
+        info.dataset.info = "true";
         Object.assign(info.style, {
             display:"flex", flexDirection:"column", justifyContent:"center",
             flex:"1", minWidth:"0", overflow:"hidden"
@@ -448,6 +526,7 @@ async function _render() {
         item.appendChild(info);
 
         const liveWrap = document.createElement("div");
+        liveWrap.dataset.livewrap = "true";
         Object.assign(liveWrap.style, {
             display:"flex", alignItems:"center", gap:"4px",
             flexShrink:"0", marginLeft:"6px"
@@ -470,6 +549,7 @@ async function _render() {
         item.appendChild(liveWrap);
 
         const rm = document.createElement("span");
+        rm.dataset.rm = "true";
         rm.textContent = "✕";
         Object.assign(rm.style, {
             borderRadius:"4px", fontSize:"11px", fontWeight:"700",
@@ -502,6 +582,9 @@ async function _render() {
 
         favBox.appendChild(item);
     });
+
+    // Aplica o modo correto (expandido/recolhido) após renderizar
+    applyCollapsedMode(favBox);
 }
 
 // FIX: Espera a sidebar esquerda aparecer no DOM (SPAs carregam async)
