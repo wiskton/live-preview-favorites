@@ -24,9 +24,30 @@ display:block;
 margin-top:8px;
 text-decoration:none;
 }
+.settings-row {
+display: flex;
+align-items: center;
+justify-content: center;
+gap: 10px;
+margin: 20px 0;
+padding: 10px;
+background: #1f1f23;
+border-radius: 8px;
+}
+.settings-row input {
+cursor: pointer;
+width: 16px;
+height: 16px;
+}
 </style>
 </head>
 <body>
+
+<h3>Configurações da extensão</h3>
+<div class="settings-row">
+<input type="checkbox" id="mixPlatforms">
+<label for="mixPlatforms" style="font-size: 13px; cursor: pointer;">Misturar favoritos (Twitch & Kick)</label>
+</div>
 
 <h2>Enjoying this extension? ❤️</h2>
 
@@ -43,6 +64,6 @@ bc1qrluvyjkatg9lezrxewe2vqh4ew6z9vl7xw0s6k
 <a href="https://kick.com/wiskton" target="_blank">Kick</a>
 
 <p style="margin-top:20px; font-size:12px; opacity:0.7;">Developed by wiskton</p>
-
+<script src="popup.js"></script>
 </body>
 </html>

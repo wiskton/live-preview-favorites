@@ -1,8 +1,8 @@
 /* =========================================
-   TWITCH FAVORITES — ONLY TWITCH
-   - Sidebar de favoritos acima dos Followed Channels
+   LIVE PREVIEW + FAVORITES (TWITCH & KICK)
+   - Sidebar de favoritos acima dos seguidos
    - Preview com thumbnail da live
-   - Botão favoritar na tela do streamer
+   - Botão favoritar na tela do streamer (Twitch/Kick)
    - Categoria real por canal (sem piscar)
    
    FIXES:
@@ -13,29 +13,51 @@
 
 let favorites   = [];
 let viewerCache = {};
-let gameCacheTwitch = {};
+let gameCache = {};
 let titleCache  = {};
+let kickDataCache = {}; // Cache para dados do Kick (thumb, viewers, etc)
 let dragChannel  = null;
 let dataLoaded   = false;
 let renderBusy   = false;
 let favCollapsed = false; // estado do toggle expandir/recolher
+let mixPlatforms = false; // se deve misturar favoritos de ambos os sites
 
 // ====================== INIT ======================
-chrome.storage.local.get(["favorites", "favCollapsed"], async (r) => {
+chrome.storage.local.get(["favorites", "favCollapsed", "mixPlatforms"], async (r) => {
     favorites    = r.favorites || [];
     favCollapsed = r.favCollapsed || false;
+    mixPlatforms = r.mixPlatforms || false;
     dataLoaded   = true;
     await preloadAll();
     waitAndRender();
 });
 
+// Ouvir mudanças nas configurações (via popup)
+chrome.storage.onChanged.addListener((changes) => {
+    if (changes.mixPlatforms) {
+        mixPlatforms = changes.mixPlatforms.newValue;
+        renderFavorites();
+    }
+    if (changes.favorites) {
+        favorites = changes.favorites.newValue;
+        renderFavorites();
+    }
+});
+
 watchNativeSidebarToggle();
+const isKick = location.hostname.includes("kick.com");
 
 async function preloadAll() {
+    if (!Array.isArray(favorites)) return;
+    
+    // Filtra apenas favoritos válidos que possuem o nome do canal
+    const validFavs = favorites.filter(f => f && f.channel);
+    const getPlat = (f) => f.platform || (f.url?.includes("kick.com") ? "kick" : "twitch");
+
     await Promise.all([
-        ...favorites.map(f => getViewer(f.channel)),
-        ...favorites.map(f => getGame(f.channel)),
-        ...favorites.map(f => getTitle(f.channel)),
+        ...validFavs.map(f => getViewer(f.channel, getPlat(f))),
+        ...validFavs.map(f => getGame(f.channel, getPlat(f))),
+        ...validFavs.map(f => getTitle(f.channel, getPlat(f))),
     ]);
 }
 
@@ -60,46 +82,85 @@ function formatViewers(n) {
 }
 
 // ====================== API ======================
-async function getViewer(ch) {
-    if (viewerCache[ch] !== undefined) return viewerCache[ch];
+async function getKickData(ch) {
+    if (kickDataCache[ch]) return kickDataCache[ch];
+    try {
+        const r = await fetch(`https://kick.com/api/v1/channels/${ch}`, {
+            headers: { "Accept": "application/json" }
+        });
+        const data = await r.json();
+        kickDataCache[ch] = data;
+        return data;
+    } catch { return null; }
+}
+
+async function getViewer(ch, platform = "twitch") {
+    const key = `${platform}:${ch}`;
+    if (viewerCache[key] !== undefined) return viewerCache[key];
+    
+    if (platform === "kick") {
+        const data = await getKickData(ch);
+        const v = data?.livestream?.viewer_count?.toString() || "0";
+        viewerCache[key] = v;
+        return v;
+    }
+
     try {
         const r = await fetch(`https://decapi.me/twitch/viewercount/${ch}`);
         const t = (await r.text()).trim();
-        viewerCache[ch] = t;
+        viewerCache[key] = t;
         return t;
     } catch { return "0"; }
 }
 
-async function getGame(ch) {
-    if (gameCacheTwitch[ch]) return gameCacheTwitch[ch];
+async function getGame(ch, platform = "twitch") {
+    const key = `${platform}:${ch}`;
+    if (gameCache[key]) return gameCache[key];
+
+    if (platform === "kick") {
+        const data = await getKickData(ch);
+        const g = data?.recent_categories?.[0]?.name || "";
+        gameCache[key] = g;
+        return g;
+    }
+
     try {
         const r = await fetch(`https://decapi.me/twitch/game/${ch}`);
         const t = (await r.text()).trim();
         if (t && !t.toLowerCase().includes("error")) {
-            gameCacheTwitch[ch] = t;
+            gameCache[key] = t;
             return t;
         }
     } catch {}
     return "";
 }
 
-async function getTitle(ch) {
-    if (titleCache[ch] !== undefined) return titleCache[ch];
+async function getTitle(ch, platform = "twitch") {
+    const key = `${platform}:${ch}`;
+    if (titleCache[key] !== undefined) return titleCache[key];
+
+    if (platform === "kick") {
+        const data = await getKickData(ch);
+        const t = data?.livestream?.session_title || "";
+        titleCache[key] = t;
+        return t;
+    }
+
     try {
         const r = await fetch(`https://decapi.me/twitch/title/${ch}`);
         const t = (await r.text()).trim();
-        titleCache[ch] = (!t || t.toLowerCase().includes("error")) ? "" : t;
-        return titleCache[ch];
+        titleCache[key] = (!t || t.toLowerCase().includes("error")) ? "" : t;
+        return titleCache[key];
     } catch { return ""; }
 }
 
-function isRerun(ch) {
-    const title = (titleCache[ch] || "").toUpperCase();
+function isRerun(ch, platform = "twitch") {
+    const title = (titleCache[`${platform}:${ch}`] || "").toUpperCase();
     return title.includes("RERUN");
 }
 
-async function isLive(ch) {
-    const v = await getViewer(ch);
+async function isLive(ch, platform = "twitch") {
+    const v = await getViewer(ch, platform);
     if (v === "LIVE" || v === "0" || v === "OFFLINE") return false;
     const n = parseInt(v, 10);
     return !isNaN(n) && n > 0;
@@ -125,6 +186,14 @@ function getTwitchThumb(ch) {
     return `https://static-cdn.jtvnw.net/previews-ttv/live_user_${ch.toLowerCase()}-640x360.jpg?t=${ts}`;
 }
 
+async function getKickThumb(ch) {
+    const data = await getKickData(ch);
+    let url = data?.livestream?.thumbnail?.url;
+    if (!url) return svgThumb(ch);
+    const ts = Math.floor(Date.now() / 30000);
+    return url + (url.includes('?') ? '&' : '?') + 't=' + ts;
+}
+
 // ====================== PREVIEW ======================
 const preview = document.createElement("div");
 Object.assign(preview.style, {
@@ -138,7 +207,7 @@ document.body.appendChild(preview);
 const previewImg = document.createElement("img");
 Object.assign(previewImg.style, {
     width:"640px", height:"360px", objectFit:"cover",
-    display:"block", borderRadius:"14px 14px 0 0", transition:"opacity 0.2s"
+    display:"block", borderRadius:"14px 14px 0 0", transition:"opacity 0.1s"
 });
 preview.appendChild(previewImg);
 
@@ -188,19 +257,31 @@ document.addEventListener("mouseover", e => {
     const a = e.target.closest("a");
     if (!a) return;
 
-    // Restringe o preview para a sidebar nativa (container, seguidos, recomendados) e nosso box de favoritos.
+    // Seletores unificados para Twitch e Kick (sidebar e itens de canal)
     const isSidebarLink = a.closest('[data-a-target="side-nav-container"]') || 
                           a.closest('[data-favorites-box="twitch"]') ||
                           a.closest('[data-test-selector="followed-channel"]') ||
-                          a.closest('[data-test-selector="recommended-channel"]');
+                          a.closest('[data-test-selector="recommended-channel"]') ||
+                          // Seletores Kick
+                          a.closest('.sidebar-container') ||
+                          a.closest('[data-testid^="sidebar-recommended-channel-"]') ||
+                          a.closest('[data-testid^="sidebar-following-channel-"]') ||
+                          a.closest('[data-testid="sidebar-channel-item"]') ||
+                          a.closest('.side-nav-card') ||
+                          (a.getAttribute('href')?.startsWith('/') && a.closest('nav'));
 
     if (!isSidebarLink) return;
 
-    const m = a.href?.match(/twitch\.tv\/([^\/?#]+)/i);
+    // Suporte a regex para Twitch e Kick
+    const m = a.href?.match(/(?:twitch\.tv|kick\.com)\/([^\/?#]+)/i);
     if (!m) return;
 
     // Garante que é um link de canal e não de uma página de sistema (como busca ou categorias)
-    const reserved = ["directory", "videos", "clips", "search", "settings", "u", "moderator", "about", "schedule", "squad"];
+    const reserved = [
+        "directory", "videos", "clips", "search", "settings", "u", "moderator", "about", 
+        "schedule", "squad", "following", "browse", "gaming", "music", "creative",
+        "channels", "video", "popout", "p", "categories", "leaderboard", "terms", "privacy"
+    ];
     if (reserved.includes(m[1].toLowerCase())) return;
 
     const ch = m[1].toLowerCase();
@@ -209,19 +290,43 @@ document.addEventListener("mouseover", e => {
     clearTimeout(previewHide);
 
     previewName.textContent = ch;
-    previewAvatar.src = `https://unavatar.io/twitch/${ch}`;
+    const platform = a.href.includes("kick.com") ? "kick" : "twitch";
+    
+    previewAvatar.src = platform === "kick" ? `https://unavatar.io/twitter/${ch}` : `https://unavatar.io/twitch/${ch}`;
     previewAvatar.onerror = () => { previewAvatar.src = svgAvatar(ch, 36); };
 
-    const v = viewerCache[ch];
+    const v = viewerCache[`${platform}:${ch}`];
     previewSub.textContent = (v && !isNaN(parseInt(v))) ? `${formatViewers(v)} viewers` : "...";
-    if (!v) getViewer(ch).then(vv => {
-        if (previewCh === ch) previewSub.textContent = !isNaN(parseInt(vv)) ? `${formatViewers(vv)} viewers` : "LIVE";
+    if (!v) getViewer(ch, platform).then(vv => {
+        if (previewCh === ch) previewSub.textContent = !isNaN(parseInt(vv)) ? `${formatViewers(vv)} viewers` : (vv === "0" ? "OFFLINE" : "LIVE");
     });
 
     previewImg.style.opacity = "0.4";
+    // Reseta a imagem anterior para evitar mostrar o streamer errado enquanto carrega o Kick
+    previewImg.src = svgThumb(ch); 
+
     previewImg.onerror = () => { previewImg.src = svgThumb(ch); previewImg.style.opacity = "1"; };
     previewImg.onload  = () => { previewImg.style.opacity = "1"; };
-    previewImg.src = getTwitchThumb(ch);
+
+    if (platform === "kick") {
+        // Tenta carregar do cache imediatamente para ganhar tempo (Carga Otimista)
+        const cached = kickDataCache[ch];
+        if (cached?.livestream?.thumbnail?.url) {
+            const url = cached.livestream.thumbnail.url;
+            previewImg.src = url + (url.includes('?') ? '&' : '?') + 't=' + Math.floor(Date.now() / 30000);
+            if (cached.user?.profile_pic) previewAvatar.src = cached.user.profile_pic;
+        }
+
+        getKickThumb(ch).then(url => {
+            if (previewCh === ch) {
+                previewImg.src = url;
+                const data = kickDataCache[ch];
+                if (data?.user?.profile_pic) previewAvatar.src = data.user.profile_pic;
+            }
+        });
+    } else {
+        previewImg.src = getTwitchThumb(ch);
+    }
 
     const rect = a.getBoundingClientRect();
     let left = rect.right + 16, top = rect.top - 40;
@@ -240,10 +345,16 @@ document.addEventListener("mouseout", e => {
 });
 
 // ====================== ENCONTRAR SIDEBAR ESQUERDA ======================
-// FIX: Evita pegar a sidebar direita (chat, raid, etc.)
-// A sidebar esquerda do Twitch tem aria-label="Followed Channels" ou
-// é o primeiro <nav> / primeiro <aside> à esquerda da tela (x < 200px)
 function getLeftSidebar() {
+    // Suporte Kick
+    const kickSidebar = document.querySelector('.sidebar-container') || 
+                        document.querySelector('#sidebar') || 
+                        document.querySelector('aside[data-testid="sidebar"]') ||
+                        document.querySelector('nav[aria-label*="Side"]') ||
+                        document.querySelector('.side-nav');
+
+    if (kickSidebar && isKick) return kickSidebar;
+
     // Tentativa 1: nav com aria-label específico
     const followedNav = document.querySelector('[aria-label="Followed Channels"]');
     if (followedNav) {
@@ -285,9 +396,10 @@ function getOrCreateFavBox(sidebar) {
     const box = document.createElement("div");
     box.dataset.favoritesBox = "twitch";
 
+    // Estilo adaptado para ambas as plataformas
     const header = document.createElement("div");
     header.dataset.favHeader = "true";
-    Object.assign(header.style, { padding:"16px 16px 8px" });
+    Object.assign(header.style, { padding: isKick ? "10px 15px" : "16px 16px 8px" });
 
     const headerLabel = document.createElement("span");
     headerLabel.textContent = "FAVORITES";
@@ -298,14 +410,37 @@ function getOrCreateFavBox(sidebar) {
 
     header.appendChild(headerLabel);
     box.appendChild(header);
-    sidebar.prepend(box);
+
+    // No Kick, tenta inserir antes da seção "Following"
+    if (isKick) {
+        // Busca o cabeçalho específico no Kick de forma flexível (div ou span)
+        const followingHeader = Array.from(sidebar.querySelectorAll('div, span, p'))
+            .find(el => {
+                const txt = el.textContent.trim();
+                return (txt === 'Following' || txt === 'Seguindo') && el.offsetHeight > 0;
+            });
+
+        // Localiza a <section> que contém este cabeçalho
+        const targetSection = followingHeader?.closest('section');
+        
+        if (targetSection) {
+            targetSection.before(box);
+        } else {
+            // Fallback: tenta colocar antes da primeira seção ou no topo
+            const firstSection = sidebar.querySelector('section');
+            if (firstSection) firstSection.before(box);
+            else sidebar.prepend(box);
+        }
+    } else {
+        sidebar.prepend(box);
+    }
     return box;
 }
 
 // ====================== DETECTAR BOTÃO NATIVO DO TWITCH ======================
 function watchNativeSidebarToggle() {
-    const COLLAPSE_LABELS = ["recolher", "collapse", "fechar", "close nav", "hide"];
-    const EXPAND_LABELS   = ["expandir", "expand",   "abrir",  "open nav",  "show"];
+    const COLLAPSE_LABELS = ["recolher", "collapse", "fechar", "close nav", "hide", "ocultar"];
+    const EXPAND_LABELS   = ["expandir", "expand",   "abrir",  "open nav",  "show", "mostrar"];
 
     document.addEventListener("click", e => {
         const btn = e.target.closest("button");
@@ -388,15 +523,42 @@ async function _render() {
     const sidebar = await waitForSidebar(8000);
     if (!sidebar) return;
 
+    // No Kick, aguardamos a seção de "Seguindo" carregar internamente para garantir o posicionamento
+    if (isKick) {
+        let attempts = 0;
+        while (attempts < 15) { // Espera até ~7.5 segundos
+            const found = Array.from(sidebar.querySelectorAll('div, span'))
+                .find(el => {
+                    const txt = el.textContent.trim();
+                    return txt === 'Following' || txt === 'Seguindo';
+                });
+            if (found) break;
+            await new Promise(r => setTimeout(r, 500));
+            attempts++;
+        }
+    }
+
     const favBox = getOrCreateFavBox(sidebar);
 
     // Remover itens antigos (preservar header)
     favBox.querySelectorAll("[data-fav]").forEach(el => el.remove());
 
+    if (!Array.isArray(favorites)) favorites = [];
+
+    const getPlat = (f) => f.platform || (f.url?.includes("kick.com") ? "kick" : "twitch");
+
+    // Filtra favoritos baseado na configuração de "misturar"
+    const currentPlatform = isKick ? "kick" : "twitch";
+    const filteredList = favorites.filter(f => {
+        if (!f || !f.channel) return false;
+        if (mixPlatforms) return true;
+        return getPlat(f) === currentPlatform;
+    });
+
     // Checar quem está online (invalida viewers para re-fetch)
-    const checks = await Promise.all(favorites.map(async fav => ({
+    const checks = await Promise.all(filteredList.map(async fav => ({
         fav,
-        online: await isLive(fav.channel)
+        online: await isLive(fav.channel, getPlat(fav))
     })));
     const onlineList = checks.filter(c => c.online).map(c => c.fav);
 
@@ -407,18 +569,22 @@ async function _render() {
     const games = {};
     const titles = {};
     await Promise.all(onlineList.map(async fav => {
-        games[fav.channel]  = await getGame(fav.channel);
-        titles[fav.channel] = await getTitle(fav.channel);
+        const p = getPlat(fav);
+        games[fav.channel]  = await getGame(fav.channel, p);
+        titles[fav.channel] = await getTitle(fav.channel, p);
     }));
 
     onlineList.forEach(fav => {
-        const v     = viewerCache[fav.channel] || "";
+        const platform = getPlat(fav);
+        const key   = `${platform}:${fav.channel}`;
+        const v     = viewerCache[key] || "";
         const game  = games[fav.channel] || "";
         const rerun = (titles[fav.channel] || "").toUpperCase().includes("RERUN");
 
         const item = document.createElement("a");
         item.dataset.fav = fav.channel;
-        item.href = `https://www.twitch.tv/${fav.channel}`;
+        item.href = platform === "kick" ? `https://kick.com/${fav.channel}` : `https://www.twitch.tv/${fav.channel}`;
+        item.title = `${platform.toUpperCase()}: ${item.href}`;
         item.draggable = true;
         item.dataset.isCustomFavorite = "true";
         Object.assign(item.style, {
@@ -488,7 +654,7 @@ async function _render() {
         item.appendChild(handle);
 
         const img = document.createElement("img");
-        img.src = `https://unavatar.io/twitch/${fav.channel}`;
+        img.src = platform === "kick" ? `https://unavatar.io/twitter/${fav.channel}` : `https://unavatar.io/twitch/${fav.channel}`;
         img.onerror = () => { img.src = svgAvatar(fav.channel, 30); };
         Object.assign(img.style, {
             width:"30px", height:"30px", borderRadius:"50%",
@@ -524,6 +690,22 @@ async function _render() {
             });
             nameDiv.appendChild(badge);
         }
+
+        // Badge da plataforma (Twitch ou Kick) - Só aparece se estiver misturando e for da plataforma oposta
+        if (mixPlatforms && platform !== currentPlatform) {
+            const platBadge = document.createElement("span");
+            platBadge.textContent = platform.toUpperCase();
+            Object.assign(platBadge.style, {
+                fontSize: "8px", fontWeight: "800",
+                padding: "1px 4px", borderRadius: "3px",
+                marginLeft: "6px", verticalAlign: "middle",
+                background: platform === "kick" ? "#53fc18" : "#9147ff",
+                color: platform === "kick" ? "#000" : "#fff",
+                lineHeight: "1"
+            });
+            nameDiv.appendChild(platBadge);
+        }
+
         info.appendChild(nameDiv);
 
         if (game) {
@@ -632,53 +814,58 @@ function moveFav(from, to) {
 // ====================== BOTÃO FAVORITAR NA LIVE ======================
 function attachFavButton() {
     try {
-        if (!location.href.includes("twitch.tv")) return;
         if (document.querySelector("[data-channel-fav-btn]")) return;
 
-        const ch = location.pathname.split("/").filter(p => p &&
-            !["videos","clips","about","schedule","squad","moderator","u","directory","search"].includes(p.toLowerCase())
-        )[0]?.toLowerCase();
+        const isKickLocal = location.hostname.includes("kick.com");
+        const pathParts = location.pathname.split("/").filter(p => p);
+        
+        // Ignora páginas de sistema do Kick e Twitch
+        const reserved = ["videos","clips","about","schedule","squad","moderator","u","directory","search", "following", "browse", "gaming"];
+        const ch = pathParts.find(p => !reserved.includes(p.toLowerCase()))?.toLowerCase();
         if (!ch) return;
 
+        // Seletores de botão de seguir (Twitch e Kick)
         const allBtns = [
             ...document.querySelectorAll('[data-a-target="unfollow-button"]'),
             ...document.querySelectorAll('[data-a-target="follow-button"]'),
             ...document.querySelectorAll('button[data-a-target*="follow"]'),
+            ...document.querySelectorAll('[data-testid="follow-button"]'),
+            ...document.querySelectorAll('.follow-button')
         ];
+        
         const anchor = allBtns.find(b =>
             b.closest('[class*="channel-header"]') ||
             b.closest('[class*="ChannelHeader"]')  ||
             b.closest('[class*="channel-info"]')   ||
             b.closest('[class*="StreamInfo"]')     ||
             b.closest('[class*="action-bar"]')     ||
-            b.closest('[class*="bottom-bar"]')
+            b.closest('[class*="bottom-bar"]')     ||
+            b.closest('.profile-header-actions')   || // Kick
+            b.closest('.flex.items-center.gap-2')     // Kick layout comum
         ) || allBtns[0];
         if (!anchor) return;
 
-        const sz = anchor.offsetHeight || 36;
         const btn = document.createElement("button");
         btn.dataset.channelFavBtn = "true";
 
         const icon  = document.createElement("span");
         icon.style.cssText = "font-size:16px; line-height:0; display:flex; align-items:center;";
-        const label = document.createElement("span");
         btn.appendChild(icon);
-        btn.appendChild(label);
 
         const applyStyle = (fav) => {
             Object.assign(btn.style, {
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                height: "32px",
-                width: "52px",
+                height: isKickLocal ? "40px" : "32px",
+                width: isKickLocal ? "40px" : "52px", // Kick mais quadrado, Twitch retangular
                 padding: "0",
                 border: "none",
-                borderRadius: "20px",
-                background: fav ? "rgba(255, 255, 255, 0.15)" : "#9147ff",
-                color: "#fff",
+                borderRadius: isKickLocal ? "4px" : "20px", // Kick menos arredondado
+                background: isKickLocal ? "#53fc18" : (fav ? "rgba(255, 255, 255, 0.15)" : "#9147ff"),
+                color: isKickLocal ? "#000" : "#fff",
                 cursor: "pointer", flexShrink: "0",
-                marginRight: "10px", 
+                marginRight: isKickLocal ? "0" : "8px", 
                 outline:"none", whiteSpace:"nowrap",
                 transition: "background-color 200ms ease, transform 100ms ease",
                 fontFamily: "Inter, Roobert, 'Helvetica Neue', Helvetica, Arial, sans-serif"
@@ -686,8 +873,6 @@ function attachFavButton() {
             icon.innerHTML = fav
                 ? `<svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2l2.5 6.5H19l-5 4 2 7.5-6-4.5-6 4.5 2-7.5-5-4h6.5L10 2z"/></svg>`
                 : `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 2l2.5 6.5H19l-5 4 2 7.5-6-4.5-6 4.5 2-7.5-5-4h6.5L10 2z"/></svg>`;
-            label.style.display = "none";
-            label.textContent = fav ? "Favorito" : "Favoritar";
             btn.title         = fav ? "Remover dos favoritos" : "Adicionar aos favoritos";
         };
 
@@ -696,19 +881,20 @@ function attachFavButton() {
         btn.onmouseenter = () => {
             btn.style.transform = "scale(1.04)";
             const isFav = favorites.some(f=>f.channel.toLowerCase()===ch);
-            btn.style.background = isFav ? "rgba(255, 255, 255, 0.25)" : "#772ce8";
+            btn.style.background = isFav ? "rgba(255, 255, 255, 0.25)" : (isKickLocal ? "#45d414" : "#772ce8");
         };
         btn.onmouseleave = () => {
             btn.style.transform = "scale(1)";
             const isFav = favorites.some(f=>f.channel.toLowerCase()===ch);
-            btn.style.background = isFav ? "rgba(255, 255, 255, 0.15)" : "#9147ff";
+            btn.style.background = isFav ? "rgba(255, 255, 255, 0.15)" : (isKickLocal ? "#53fc18" : "#9147ff");
         };
 
         btn.onclick = e => {
             e.preventDefault(); e.stopPropagation();
             const on = favorites.some(f=>f.channel.toLowerCase()===ch);
+            const plat = isKickLocal ? "kick" : "twitch";
             if (on) { favorites = favorites.filter(f=>f.channel.toLowerCase()!==ch); }
-            else    { favorites.unshift({ channel:ch, url:`https://www.twitch.tv/${ch}` }); }
+            else    { favorites.unshift({ channel:ch, platform: plat, url: location.href }); }
             saveFav(); renderFavorites();
             applyStyle(!on);
             btn.style.transform = "scale(0.92)";
@@ -717,11 +903,36 @@ function attachFavButton() {
 
         // Cria um wrapper seguindo o sistema de design (ScCore) da Twitch
         const wrapper = document.createElement("div");
-        wrapper.className = "Layout-sc-1xcs6mc-0 gWaIYG";
+        if (isKickLocal) {
+            // No Kick, forçamos 40x40 para alinhar perfeitamente com o sino
+            Object.assign(wrapper.style, { 
+                display: "inline-flex", 
+                alignItems: "center", 
+                justifyContent: "center",
+                width: "40px",
+                height: "40px" 
+            });
+            wrapper.className = "kick-fav-wrapper";
+        } else {
+            wrapper.className = "Layout-sc-1xcs6mc-0 gWaIYG";
+        }
         wrapper.appendChild(btn);
 
-        // Localiza o container do botão de seguir para inserir o nosso wrapper antes dele
-        const target = anchor.closest('.Layout-sc-1xcs6mc-0') || anchor;
+        // Lógica de posicionamento específica para o Kick
+        if (isKickLocal) {
+            const kickActionContainer = document.querySelector('.flex.grow.gap-2.lg\\:grow-0');
+            const bellBtn = kickActionContainer?.querySelector('button[aria-label*="Notificações"], button[aria-label*="Notifications"]');
+            
+            if (bellBtn) {
+                bellBtn.insertAdjacentElement("beforebegin", wrapper);
+            } else if (kickActionContainer) {
+                kickActionContainer.prepend(wrapper);
+            }
+            return;
+        }
+
+        // Fallback para Twitch
+        const target = anchor.closest('.Layout-sc-1xcs6mc-0') || anchor.parentElement;
         target.insertAdjacentElement("beforebegin", wrapper);
     } catch {}
 }
@@ -732,9 +943,10 @@ function attachFavButton() {
 // Invalida TODOS os caches (viewers + games) para refletir lives que encerraram
 setInterval(() => {
     if (!dataLoaded) return;
-    viewerCache     = {};  // força re-fetch de viewers
-    gameCacheTwitch = {}; // força re-fetch de categorias (podem ter mudado)
-    titleCache      = {}; // força re-fetch de títulos (rerun pode ter mudado)
+    viewerCache     = {};
+    gameCache       = {};
+    titleCache      = {};
+    kickDataCache   = {};
     renderFavorites();
 }, 5 * 60 * 1000); // 5 minutos
 
