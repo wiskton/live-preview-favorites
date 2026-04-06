@@ -20,7 +20,7 @@ A powerful extension for Chromium browsers that combines the best of **Twitch** 
 * **⚡ Live Hover Preview:** Hover over a streamer's link to see a real-time preview of the broadcast.
 * **⭐ Favorites System:** Save your favorite channels for quick access within the popup.
 * **🔄 Dual Platform:** Native integration with Twitch and Kick APIs simultaneously.
-* **🎨 Minimalist UI:** Clean design that doesn't interfere with the original site navigation.
+*   **🎨 Minimalist UI:** A clean, non-intrusive design that blends perfectly with the platform's original look.
 
 ---
 
@@ -50,15 +50,14 @@ A powerful extension for Chromium browsers that combines the best of **Twitch** 
 | `manifest.json` | Configurations, permissions, and metadata. |
 | `content.js` | Script that runs inside Twitch/Kick pages. |
 | `popup.html` | The interface that appears when clicking the icon. |
+| `popup.js` | Handles storage and logic for the popup interface. |
 | `icons/` | Folder containing logos in different sizes. |
 
 ---
 
-## ✅ TODO / Checklist
-
-### 🟢 Kick
-
-- [ ] favorites not work
+## 🗺️ Roadmap / Checklist
+### 🟢 Global
+- [] Fix Kick favorites sidebar insertion
 
 ---
 

@@ -369,7 +369,8 @@ function getLeftSidebar() {
     const kickSidebar = document.querySelector('.sidebar-container') || 
                         document.querySelector('#sidebar') || 
                         document.querySelector('aside[data-testid="sidebar"]') ||
-                        document.querySelector('nav[aria-label*="Side"]') ||
+                        document.querySelector('aside nav') ||
+                        document.querySelector('.side-nav-container') ||
                         document.querySelector('.side-nav');
 
     if (kickSidebar && isKick) return kickSidebar;
@@ -432,20 +433,13 @@ function getOrCreateFavBox(sidebar) {
 
     // No Kick, tenta inserir antes da seção "Following"
     if (isKick) {
-        // Busca o cabeçalho específico no Kick de forma flexível (div ou span)
-        const followingHeader = Array.from(sidebar.querySelectorAll('div, span, p'))
-            .find(el => {
-                const txt = el.textContent.trim();
-                return (txt === 'Following' || txt === 'Seguindo') && el.offsetHeight > 0;
-            });
-
-        // Localiza a <section> que contém este cabeçalho
-        const targetSection = followingHeader?.closest('section');
-        
-        if (targetSection) {
-            targetSection.before(box);
+        // No Kick, o melhor lugar é dentro do contêiner de scroll, no topo
+        const scrollCont = sidebar.querySelector('.simplebar-content') || 
+                           sidebar.querySelector('[data-simplebar-placeholder]')?.parentElement ||
+                           sidebar;
+        if (scrollCont) {
+            scrollCont.prepend(box);
         } else {
-            // Fallback: tenta colocar antes da primeira seção ou no topo
             const firstSection = sidebar.querySelector('section');
             if (firstSection) firstSection.before(box);
             else sidebar.prepend(box);
@@ -541,21 +535,6 @@ async function _render() {
     // FIX: Aguarda a sidebar esquerda aparecer — com timeout máximo de 8s
     const sidebar = await waitForSidebar(8000);
     if (!sidebar) return;
-
-    // No Kick, aguardamos a seção de "Seguindo" carregar internamente para garantir o posicionamento
-    if (isKick) {
-        let attempts = 0;
-        while (attempts < 15) { // Espera até ~7.5 segundos
-            const found = Array.from(sidebar.querySelectorAll('div, span'))
-                .find(el => {
-                    const txt = el.textContent.trim();
-                    return txt === 'Following' || txt === 'Seguindo';
-                });
-            if (found) break;
-            await new Promise(r => setTimeout(r, 500));
-            attempts++;
-        }
-    }
 
     const favBox = getOrCreateFavBox(sidebar);
 
