@@ -58,7 +58,7 @@ A powerful extension for Chromium browsers that combines the best of **Twitch** 
 
 ### 🟢 Kick
 
-- [ ] not support
+- [ ] favorites not work
 
 ---
 
