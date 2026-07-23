@@ -1,0 +1,9 @@
+# Build artifacts (packages generated for Chrome Web Store / Firefox AMO)
+dist/
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
