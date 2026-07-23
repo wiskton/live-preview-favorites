@@ -1,0 +1,47 @@
+{
+  "extDescription": {
+    "message": "Survolez le lien d'un streamer pour prévisualiser sa miniature en direct. Enregistrez vos favoris dans la barre latérale et repérez instantanément les rediffusions grâce au titre."
+  },
+  "favoritesLabel": {
+    "message": "FAVORIS"
+  },
+  "dragToReorder": {
+    "message": "Glisser pour réorganiser"
+  },
+  "rerunTooltip": {
+    "message": "Rediffusion"
+  },
+  "removeFavorite": {
+    "message": "Retirer des favoris"
+  },
+  "addFavorite": {
+    "message": "Ajouter aux favoris"
+  },
+  "offlineText": {
+    "message": "HORS LIGNE"
+  },
+  "liveText": {
+    "message": "EN DIRECT"
+  },
+  "viewersSuffix": {
+    "message": "spectateurs"
+  },
+  "popupSettingsTitle": {
+    "message": "Paramètres de l'extension"
+  },
+  "popupMixPlatforms": {
+    "message": "Mélanger les favoris (Twitch et Kick)"
+  },
+  "popupEnjoying": {
+    "message": "Vous aimez cette extension ? ❤️"
+  },
+  "popupDonateText": {
+    "message": "Vous pouvez soutenir en faisant un don en Bitcoin :"
+  },
+  "popupFollowMe": {
+    "message": "Suivez-moi"
+  },
+  "popupDevelopedBy": {
+    "message": "Développé par wiskton"
+  }
+}

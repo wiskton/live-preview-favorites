@@ -1,0 +1,47 @@
+{
+  "extDescription": {
+    "message": "Passe o mouse sobre o link de qualquer streamer para ver uma prévia da live. Salve favoritos na sua barra lateral e identifique reprises pelo título instantaneamente."
+  },
+  "favoritesLabel": {
+    "message": "FAVORITOS"
+  },
+  "dragToReorder": {
+    "message": "Arrastar para reordenar"
+  },
+  "rerunTooltip": {
+    "message": "Reprise"
+  },
+  "removeFavorite": {
+    "message": "Remover dos favoritos"
+  },
+  "addFavorite": {
+    "message": "Adicionar aos favoritos"
+  },
+  "offlineText": {
+    "message": "OFFLINE"
+  },
+  "liveText": {
+    "message": "AO VIVO"
+  },
+  "viewersSuffix": {
+    "message": "espectadores"
+  },
+  "popupSettingsTitle": {
+    "message": "Configurações da extensão"
+  },
+  "popupMixPlatforms": {
+    "message": "Misturar favoritos (Twitch & Kick)"
+  },
+  "popupEnjoying": {
+    "message": "Gostando da extensão? ❤️"
+  },
+  "popupDonateText": {
+    "message": "Você pode apoiar doando Bitcoin:"
+  },
+  "popupFollowMe": {
+    "message": "Me siga"
+  },
+  "popupDevelopedBy": {
+    "message": "Desenvolvido por wiskton"
+  }
+}

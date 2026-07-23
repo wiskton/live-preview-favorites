@@ -1,0 +1,47 @@
+{
+  "extDescription": {
+    "message": "Fahre mit der Maus über den Link eines Streamers, um eine Live-Vorschau zu sehen. Speichere Favoriten in deiner Seitenleiste und erkenne Wiederholungen sofort anhand des Titels."
+  },
+  "favoritesLabel": {
+    "message": "FAVORITEN"
+  },
+  "dragToReorder": {
+    "message": "Ziehen zum Neuordnen"
+  },
+  "rerunTooltip": {
+    "message": "Wiederholung"
+  },
+  "removeFavorite": {
+    "message": "Aus Favoriten entfernen"
+  },
+  "addFavorite": {
+    "message": "Zu Favoriten hinzufügen"
+  },
+  "offlineText": {
+    "message": "OFFLINE"
+  },
+  "liveText": {
+    "message": "LIVE"
+  },
+  "viewersSuffix": {
+    "message": "Zuschauer"
+  },
+  "popupSettingsTitle": {
+    "message": "Erweiterungseinstellungen"
+  },
+  "popupMixPlatforms": {
+    "message": "Favoriten mischen (Twitch & Kick)"
+  },
+  "popupEnjoying": {
+    "message": "Gefällt dir die Erweiterung? ❤️"
+  },
+  "popupDonateText": {
+    "message": "Du kannst mit einer Bitcoin-Spende unterstützen:"
+  },
+  "popupFollowMe": {
+    "message": "Folge mir"
+  },
+  "popupDevelopedBy": {
+    "message": "Entwickelt von wiskton"
+  }
+}

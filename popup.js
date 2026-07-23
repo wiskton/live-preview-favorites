@@ -1,4 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Traduz todos os elementos marcados com data-i18n usando o idioma do navegador
+    // (chrome.i18n escolhe automaticamente o locale em _locales/, com fallback para "en")
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const msg = chrome.i18n.getMessage(el.dataset.i18n);
+        if (msg) el.textContent = msg;
+    });
+
     const mixCheckbox = document.getElementById('mixPlatforms');
     if (!mixCheckbox) return;
 

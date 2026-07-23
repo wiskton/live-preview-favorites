@@ -1,0 +1,47 @@
+{
+  "extDescription": {
+    "message": "配信者のリンクにカーソルを合わせると、配信中のサムネイルをプレビューできます。サイドバーにお気に入りを保存して、タイトルから再放送を即座に見分けられます。"
+  },
+  "favoritesLabel": {
+    "message": "お気に入り"
+  },
+  "dragToReorder": {
+    "message": "ドラッグして並べ替え"
+  },
+  "rerunTooltip": {
+    "message": "再放送"
+  },
+  "removeFavorite": {
+    "message": "お気に入りから削除"
+  },
+  "addFavorite": {
+    "message": "お気に入りに追加"
+  },
+  "offlineText": {
+    "message": "オフライン"
+  },
+  "liveText": {
+    "message": "配信中"
+  },
+  "viewersSuffix": {
+    "message": "視聴者"
+  },
+  "popupSettingsTitle": {
+    "message": "拡張機能の設定"
+  },
+  "popupMixPlatforms": {
+    "message": "お気に入りを統合 (Twitch と Kick)"
+  },
+  "popupEnjoying": {
+    "message": "この拡張機能を気に入っていただけましたか? ❤️"
+  },
+  "popupDonateText": {
+    "message": "ビットコインでの寄付でサポートできます:"
+  },
+  "popupFollowMe": {
+    "message": "フォローする"
+  },
+  "popupDevelopedBy": {
+    "message": "wiskton が開発"
+  }
+}

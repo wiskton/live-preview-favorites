@@ -1,0 +1,47 @@
+{
+  "extDescription": {
+    "message": "Наведите курсор на ссылку любого стримера, чтобы увидеть превью прямого эфира. Сохраняйте избранные каналы в боковой панели и мгновенно определяйте повторы по названию."
+  },
+  "favoritesLabel": {
+    "message": "ИЗБРАННОЕ"
+  },
+  "dragToReorder": {
+    "message": "Перетащите для изменения порядка"
+  },
+  "rerunTooltip": {
+    "message": "Повтор"
+  },
+  "removeFavorite": {
+    "message": "Удалить из избранного"
+  },
+  "addFavorite": {
+    "message": "Добавить в избранное"
+  },
+  "offlineText": {
+    "message": "ОФФЛАЙН"
+  },
+  "liveText": {
+    "message": "В ЭФИРЕ"
+  },
+  "viewersSuffix": {
+    "message": "зрителей"
+  },
+  "popupSettingsTitle": {
+    "message": "Настройки расширения"
+  },
+  "popupMixPlatforms": {
+    "message": "Смешивать избранное (Twitch и Kick)"
+  },
+  "popupEnjoying": {
+    "message": "Нравится расширение? ❤️"
+  },
+  "popupDonateText": {
+    "message": "Вы можете поддержать, пожертвовав Bitcoin:"
+  },
+  "popupFollowMe": {
+    "message": "Подписывайтесь"
+  },
+  "popupDevelopedBy": {
+    "message": "Разработано wiskton"
+  }
+}

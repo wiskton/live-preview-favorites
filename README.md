@@ -1,8 +1,9 @@
 # <img src="icons/icon128.png" align="center" width="40"> Live Preview + Favorites
 
-[![Version](https://img.shields.io/badge/version-4.0-blueviolet.svg)](#)
+[![Version](https://img.shields.io/badge/version-4.1-blueviolet.svg)](#)
 [![Manifest](https://img.shields.io/badge/manifest-v3-green.svg)](#)
 [![Platforms](https://img.shields.io/badge/platforms-Twitch%20%7C%20Kick-black.svg)](#)
+[![Languages](https://img.shields.io/badge/languages-7-informational.svg)](#)
 
 A powerful extension for Chromium browsers that combines the best of **Twitch** and **Kick**. Favorite your streamers and visualize what's happening on live streams just by hovering your mouse, without switching tabs.
 
@@ -21,6 +22,7 @@ A powerful extension for Chromium browsers that combines the best of **Twitch** 
 * **⭐ Favorites System:** Save your favorite channels for quick access within the popup.
 * **🔄 Dual Platform:** Native integration with Twitch and Kick APIs simultaneously.
 *   **🎨 Minimalist UI:** A clean, non-intrusive design that blends perfectly with the platform's original look.
+*   **🌍 Multi-language:** Automatically matches your browser's language (English, Portuguese-BR, Spanish, French, German, Russian, Japanese), falling back to English.
 
 ---
 
@@ -28,8 +30,9 @@ A powerful extension for Chromium browsers that combines the best of **Twitch** 
 
 * **JavaScript (ES6+):** Core logic and DOM manipulation.
 * **Chrome Extension API (V3):** The most modern and secure standard for extensions.
+* **chrome.i18n API:** Automatic UI translation based on the browser's language.
 * **Decapi.me & Unavatar.io:** Metadata and avatar fetching.
-* **CSS3:** Styling for tooltips and the side interface.
+* **Inline CSS-in-JS:** The preview tooltip and sidebar are styled directly in `content.js` (no separate stylesheet).
 
 ---
 
@@ -52,12 +55,25 @@ A powerful extension for Chromium browsers that combines the best of **Twitch** 
 | `popup.html` | The interface that appears when clicking the icon. |
 | `popup.js` | Handles storage and logic for the popup interface. |
 | `icons/` | Folder containing logos in different sizes. |
+| `_locales/` | Translations (`messages.json`) per language, used by `chrome.i18n`. |
+
+> Note: `style.css` was removed — it was leftover from an earlier iframe-based preview and was never referenced by `manifest.json` or any page; the current hover preview is built entirely with inline styles in `content.js`.
 
 ---
 
 ## 🗺️ Roadmap / Checklist
 ### 🟢 Global
-- [] Fix Kick favorites sidebar insertion
+- [x] Fix Kick favorites sidebar insertion
+
+---
+
+## 📝 Changelog
+
+### 4.1
+* **Fix:** Kick's sidebar markup changed (now a `<div id="sidebar-wrapper">` instead of `<aside>`/`<nav>`), so the favorites box was never being inserted there. Detection and insertion logic were rewritten against Kick's current DOM.
+* **Fix:** Favoriting, removing, and reordering channels now key off channel **+ platform**, instead of channel name alone — previously, having the same handle favorited on both Twitch and Kick could remove or reorder the wrong one.
+* **New:** Multi-language UI (English, Portuguese-BR, Spanish, French, German, Russian, Japanese), automatically matched to the browser's language via `chrome.i18n`.
+* **Cleanup:** Removed the unused `style.css` (leftover from an old iframe-based preview).
 
 ---
 

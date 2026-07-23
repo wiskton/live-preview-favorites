@@ -47,12 +47,22 @@ chrome.storage.onChanged.addListener((changes) => {
 watchNativeSidebarToggle();
 const isKick = location.hostname.includes("kick.com");
 
+// Deriva a plataforma de um favorito (fallback pela URL para favoritos antigos sem o campo)
+function getPlat(f) {
+    return f.platform || (f.url?.includes("kick.com") ? "kick" : "twitch");
+}
+
+// Compara um favorito por canal+plataforma (evita colisão quando o mesmo
+// nome de canal existe tanto na Twitch quanto na Kick)
+function sameFav(f, channel, platform) {
+    return f.channel.toLowerCase() === channel.toLowerCase() && getPlat(f) === platform;
+}
+
 async function preloadAll() {
     if (!Array.isArray(favorites)) return;
-    
+
     // Filtra apenas favoritos válidos que possuem o nome do canal
     const validFavs = favorites.filter(f => f && f.channel);
-    const getPlat = (f) => f.platform || (f.url?.includes("kick.com") ? "kick" : "twitch");
 
     await Promise.all([
         ...validFavs.map(f => getViewer(f.channel, getPlat(f))),
@@ -75,7 +85,7 @@ function saveFav() {
 
 function formatViewers(n) {
     n = parseInt(n);
-    if (isNaN(n) || n <= 0) return "LIVE";
+    if (isNaN(n) || n <= 0) return chrome.i18n.getMessage("liveText");
     if (n < 1000)    return n.toString();
     if (n < 1000000) return (n / 1000).toFixed(1).replace(".0","") + "k";
     return (n / 1000000).toFixed(1).replace(".0","") + "M";
@@ -255,7 +265,7 @@ Object.assign(previewBadge.style, {
     fontSize:"11px", fontWeight:"700", padding:"3px 8px",
     borderRadius:"6px", letterSpacing:"0.5px", flexShrink:"0"
 });
-previewBadge.textContent = "🔴 LIVE";
+previewBadge.textContent = `🔴 ${chrome.i18n.getMessage("liveText")}`;
 previewInfo.appendChild(previewBadge);
 
 let previewCh = null, previewHide = null;
@@ -315,9 +325,10 @@ document.addEventListener("mouseover", e => {
     previewAvatar.onerror = () => { previewAvatar.src = svgAvatar(ch, 36); };
 
     const v = viewerCache[`${platform}:${ch}`];
-    previewSub.textContent = (v && !isNaN(parseInt(v))) ? `${formatViewers(v)} viewers` : "...";
+    const viewersLabel = chrome.i18n.getMessage("viewersSuffix");
+    previewSub.textContent = (v && !isNaN(parseInt(v))) ? `${formatViewers(v)} ${viewersLabel}` : "...";
     if (!v) getViewer(ch, platform).then(vv => {
-        if (previewCh === ch) previewSub.textContent = !isNaN(parseInt(vv)) ? `${formatViewers(vv)} viewers` : (vv === "0" ? "OFFLINE" : "LIVE");
+        if (previewCh === ch) previewSub.textContent = !isNaN(parseInt(vv)) ? `${formatViewers(vv)} ${viewersLabel}` : (vv === "0" ? chrome.i18n.getMessage("offlineText") : chrome.i18n.getMessage("liveText"));
     });
 
     previewImg.style.opacity = "0.4";
@@ -366,12 +377,13 @@ document.addEventListener("mouseout", e => {
 // ====================== ENCONTRAR SIDEBAR ESQUERDA ======================
 function getLeftSidebar() {
     // Suporte Kick
-    const kickSidebar = document.querySelector('.sidebar-container') || 
-                        document.querySelector('#sidebar') || 
-                        document.querySelector('aside[data-testid="sidebar"]') ||
-                        document.querySelector('aside nav') ||
-                        document.querySelector('.side-nav-container') ||
-                        document.querySelector('.side-nav');
+    // A Kick usa uma <div id="sidebar-wrapper"> (não é <aside>/<nav>), então os
+    // seletores antigos (.sidebar-container, #sidebar, aside[...], .side-nav...)
+    // nunca batiam e a sidebar de favoritos nunca era inserida no Kick.
+    const kickSidebar = document.querySelector('#sidebar-wrapper') ||
+                        document.querySelector('[data-testid^="sidebar-"]')?.closest('div[id], aside, nav') ||
+                        document.querySelector('.sidebar-container') ||
+                        document.querySelector('aside[data-testid="sidebar"]');
 
     if (kickSidebar && isKick) return kickSidebar;
 
@@ -422,7 +434,7 @@ function getOrCreateFavBox(sidebar) {
     Object.assign(header.style, { padding: isKick ? "10px 15px" : "16px 16px 8px" });
 
     const headerLabel = document.createElement("span");
-    headerLabel.textContent = "FAVORITES";
+    headerLabel.textContent = chrome.i18n.getMessage("favoritesLabel");
     Object.assign(headerLabel.style, {
         color:"#bf94ff", fontWeight:"700", fontSize:"11px",
         letterSpacing:"1.5px", textTransform:"uppercase"
@@ -431,18 +443,16 @@ function getOrCreateFavBox(sidebar) {
     header.appendChild(headerLabel);
     box.appendChild(header);
 
-    // No Kick, tenta inserir antes da seção "Following"
+    // No Kick, tenta inserir antes da seção "Following"/"Recommended"
     if (isKick) {
-        // No Kick, o melhor lugar é dentro do contêiner de scroll, no topo
-        const scrollCont = sidebar.querySelector('.simplebar-content') || 
-                           sidebar.querySelector('[data-simplebar-placeholder]')?.parentElement ||
-                           sidebar;
-        if (scrollCont) {
-            scrollCont.prepend(box);
+        // O container com scroll (onde ficam as seções de canais) fica dentro
+        // da #sidebar-wrapper, identificado pela classe utilitária overflow-y-auto
+        const scrollCont = sidebar.querySelector('.overflow-y-auto') || sidebar;
+        const firstSection = scrollCont.querySelector('section');
+        if (firstSection) {
+            firstSection.before(box);
         } else {
-            const firstSection = sidebar.querySelector('section');
-            if (firstSection) firstSection.before(box);
-            else sidebar.prepend(box);
+            scrollCont.prepend(box);
         }
     } else {
         sidebar.prepend(box);
@@ -543,8 +553,6 @@ async function _render() {
 
     if (!Array.isArray(favorites)) favorites = [];
 
-    const getPlat = (f) => f.platform || (f.url?.includes("kick.com") ? "kick" : "twitch");
-
     // Filtra favoritos baseado na configuração de "misturar"
     const currentPlatform = isKick ? "kick" : "twitch";
     const filteredList = favorites.filter(f => {
@@ -605,7 +613,7 @@ async function _render() {
         };
 
         item.ondragstart = e => {
-            dragChannel = fav.channel;
+            dragChannel = { channel: fav.channel, platform };
             item.style.opacity   = "0.45";
             item.style.transform = "scale(0.97)";
             item.style.cursor    = "grabbing";
@@ -623,7 +631,7 @@ async function _render() {
         item.ondragover = e => {
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
-            if (dragChannel !== fav.channel) {
+            if (dragChannel && !sameFav(fav, dragChannel.channel, dragChannel.platform)) {
                 item.style.boxShadow = "inset 0 2px 0 0 #9147ff";
                 item.style.background = "rgba(145,71,255,0.10)";
             }
@@ -636,13 +644,15 @@ async function _render() {
             e.preventDefault();
             item.style.boxShadow = "none";
             item.style.background = "transparent";
-            if (dragChannel !== fav.channel) moveFav(dragChannel, fav.channel);
+            if (dragChannel && !sameFav(fav, dragChannel.channel, dragChannel.platform)) {
+                moveFav(dragChannel, { channel: fav.channel, platform });
+            }
         };
 
         const handle = document.createElement("span");
         handle.dataset.handle = "true";
         handle.textContent = "⠿";
-        handle.title = "Arrastar para reordenar";
+        handle.title = chrome.i18n.getMessage("dragToReorder");
         Object.assign(handle.style, {
             fontSize:"14px", color:"rgba(255,255,255,0.3)",
             flexShrink:"0", width:"14px", textAlign:"center",
@@ -676,7 +686,9 @@ async function _render() {
             lineHeight:"1.3"
         });
         if (rerun) {
-            nameDiv.title = "Reprise (RERUN)";
+            // "RERUN" no badge fica em inglês em todos os idiomas (curto, universal
+            // nas plataformas de stream); só o tooltip descritivo é traduzido.
+            nameDiv.title = `${chrome.i18n.getMessage("rerunTooltip")} (RERUN)`;
             const badge = document.createElement("span");
             badge.textContent = " RERUN";
             Object.assign(badge.style, {
@@ -767,7 +779,7 @@ async function _render() {
             item.style.opacity = "0";
             item.style.transition = "opacity 0.15s";
             setTimeout(() => {
-                favorites = favorites.filter(f => f.channel !== fav.channel);
+                favorites = favorites.filter(f => !sameFav(f, fav.channel, platform));
                 saveFav();
                 renderFavorites();
             }, 150);
@@ -800,8 +812,8 @@ function waitForSidebar(timeout = 8000) {
 }
 
 function moveFav(from, to) {
-    const fi = favorites.findIndex(f => f.channel === from);
-    const ti = favorites.findIndex(f => f.channel === to);
+    const fi = favorites.findIndex(f => sameFav(f, from.channel, from.platform));
+    const ti = favorites.findIndex(f => sameFav(f, to.channel, to.platform));
     if (fi < 0 || ti < 0) return;
     const [item] = favorites.splice(fi, 1);
     favorites.splice(ti, 0, item);
@@ -871,27 +883,27 @@ function attachFavButton() {
             icon.innerHTML = fav
                 ? `<svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2l2.5 6.5H19l-5 4 2 7.5-6-4.5-6 4.5 2-7.5-5-4h6.5L10 2z"/></svg>`
                 : `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 2l2.5 6.5H19l-5 4 2 7.5-6-4.5-6 4.5 2-7.5-5-4h6.5L10 2z"/></svg>`;
-            btn.title         = fav ? "Remover dos favoritos" : "Adicionar aos favoritos";
+            btn.title         = chrome.i18n.getMessage(fav ? "removeFavorite" : "addFavorite");
         };
 
-        applyStyle(favorites.some(f => f.channel.toLowerCase() === ch));
+        const plat = isKickLocal ? "kick" : "twitch";
+        const isFavNow = () => favorites.some(f => sameFav(f, ch, plat));
+
+        applyStyle(isFavNow());
 
         btn.onmouseenter = () => {
             btn.style.transform = "scale(1.04)";
-            const isFav = favorites.some(f=>f.channel.toLowerCase()===ch);
-            btn.style.background = isFav ? "rgba(255, 255, 255, 0.25)" : (isKickLocal ? "#45d414" : "#772ce8");
+            btn.style.background = isFavNow() ? "rgba(255, 255, 255, 0.25)" : (isKickLocal ? "#45d414" : "#772ce8");
         };
         btn.onmouseleave = () => {
             btn.style.transform = "scale(1)";
-            const isFav = favorites.some(f=>f.channel.toLowerCase()===ch);
-            btn.style.background = isFav ? "rgba(255, 255, 255, 0.15)" : (isKickLocal ? "#53fc18" : "#9147ff");
+            btn.style.background = isFavNow() ? "rgba(255, 255, 255, 0.15)" : (isKickLocal ? "#53fc18" : "#9147ff");
         };
 
         btn.onclick = e => {
             e.preventDefault(); e.stopPropagation();
-            const on = favorites.some(f=>f.channel.toLowerCase()===ch);
-            const plat = isKickLocal ? "kick" : "twitch";
-            if (on) { favorites = favorites.filter(f=>f.channel.toLowerCase()!==ch); }
+            const on = isFavNow();
+            if (on) { favorites = favorites.filter(f => !sameFav(f, ch, plat)); }
             else    { favorites.unshift({ channel:ch, platform: plat, url: location.href }); }
             saveFav(); renderFavorites();
             applyStyle(!on);

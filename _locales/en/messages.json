@@ -1,0 +1,47 @@
+{
+  "extDescription": {
+    "message": "Hover any streamer link to preview their live thumbnail. Save favorites to your sidebar and instantly spot reruns by title."
+  },
+  "favoritesLabel": {
+    "message": "FAVORITES"
+  },
+  "dragToReorder": {
+    "message": "Drag to reorder"
+  },
+  "rerunTooltip": {
+    "message": "Rerun"
+  },
+  "removeFavorite": {
+    "message": "Remove from favorites"
+  },
+  "addFavorite": {
+    "message": "Add to favorites"
+  },
+  "offlineText": {
+    "message": "OFFLINE"
+  },
+  "liveText": {
+    "message": "LIVE"
+  },
+  "viewersSuffix": {
+    "message": "viewers"
+  },
+  "popupSettingsTitle": {
+    "message": "Extension settings"
+  },
+  "popupMixPlatforms": {
+    "message": "Mix favorites (Twitch & Kick)"
+  },
+  "popupEnjoying": {
+    "message": "Enjoying this extension? ❤️"
+  },
+  "popupDonateText": {
+    "message": "You can support by donating Bitcoin:"
+  },
+  "popupFollowMe": {
+    "message": "Follow me"
+  },
+  "popupDevelopedBy": {
+    "message": "Developed by wiskton"
+  }
+}
