@@ -16,6 +16,13 @@ let viewerCache = {};
 let gameCache = {};
 let titleCache  = {};
 let kickDataCache = {}; // Cache para dados do Kick (thumb, viewers, etc)
+// Cache de avatares { "plataforma:canal": { url, ts } }. Persistido em
+// chrome.storage.local (não só em memória) pra não ficar rebatendo na API
+// do Kick/decapi.me a cada navegação — só refaz a requisição depois de
+// AVATAR_TTL_MS, tempo suficiente pra pegar troca de foto de perfil sem
+// martelar a API a cada render.
+let avatarCache = {};
+const AVATAR_TTL_MS = 60 * 60 * 1000; // 1h
 let dragChannel  = null;
 let dataLoaded   = false;
 let renderBusy   = false;
@@ -23,10 +30,11 @@ let favCollapsed = false; // estado do toggle expandir/recolher
 let mixPlatforms = false; // se deve misturar favoritos de ambos os sites
 
 // ====================== INIT ======================
-chrome.storage.local.get(["favorites", "favCollapsed", "mixPlatforms"], async (r) => {
+chrome.storage.local.get(["favorites", "favCollapsed", "mixPlatforms", "avatarCache"], async (r) => {
     favorites    = r.favorites || [];
     favCollapsed = r.favCollapsed || false;
     mixPlatforms = r.mixPlatforms || false;
+    avatarCache  = r.avatarCache || {};
     dataLoaded   = true;
     await preloadAll();
     waitAndRender();
@@ -68,6 +76,7 @@ async function preloadAll() {
         ...validFavs.map(f => getViewer(f.channel, getPlat(f))),
         ...validFavs.map(f => getGame(f.channel, getPlat(f))),
         ...validFavs.map(f => getTitle(f.channel, getPlat(f))),
+        ...validFavs.map(f => getAvatar(f.channel, getPlat(f))),
     ]);
 }
 
@@ -162,6 +171,37 @@ async function getTitle(ch, platform = "twitch") {
         titleCache[key] = (!t || t.toLowerCase().includes("error")) ? "" : t;
         return titleCache[key];
     } catch { return ""; }
+}
+
+// unavatar.io passou a exigir cadastro/API key (429 "Daily anonymous rate
+// limit reached") pra requisições anônimas, então não dá mais pra usar como
+// fonte de avatar. Kick já expõe a foto real em user.profile_pic (mesma
+// resposta que usamos pra viewers/categoria/título); Twitch não tem um
+// endpoint público sem OAuth, então usamos o decapi.me/twitch/avatar.
+async function getAvatar(ch, platform = "twitch") {
+    const key = `${platform}:${ch}`;
+    const cached = avatarCache[key];
+    if (cached && (Date.now() - cached.ts) < AVATAR_TTL_MS) return cached.url;
+
+    let url = null;
+    if (platform === "kick") {
+        const data = await getKickData(ch);
+        url = data?.user?.profile_pic || null;
+    } else {
+        try {
+            const r = await fetch(`https://decapi.me/twitch/avatar/${ch}`);
+            const t = (await r.text()).trim();
+            if (t && t.startsWith("http")) url = t;
+        } catch {}
+    }
+
+    if (url) {
+        avatarCache[key] = { url, ts: Date.now() };
+        chrome.storage.local.set({ avatarCache });
+        return url;
+    }
+    // Falhou em atualizar: melhor reaproveitar a URL antiga (mesmo vencida) do que nada
+    return cached?.url || null;
 }
 
 function isRerun(ch, platform = "twitch") {
@@ -321,8 +361,16 @@ document.addEventListener("mouseover", e => {
         }
     });
 
-    previewAvatar.src = platform === "kick" ? `https://unavatar.io/twitter/${ch}` : `https://unavatar.io/twitch/${ch}`;
+    const avatarKey = `${platform}:${ch}`;
+    const cachedAvatar = avatarCache[avatarKey];
+    previewAvatar.src = cachedAvatar ? cachedAvatar.url : svgAvatar(ch, 36);
     previewAvatar.onerror = () => { previewAvatar.src = svgAvatar(ch, 36); };
+    // Chama sempre: getAvatar() já decide sozinho (via TTL) se reaproveita o
+    // cache ou busca de novo — não devemos decidir isso aqui de novo, senão
+    // uma entrada vencida nunca seria atualizada.
+    getAvatar(ch, platform).then(url => {
+        if (previewCh === ch && url) previewAvatar.src = url;
+    });
 
     const v = viewerCache[`${platform}:${ch}`];
     const viewersLabel = chrome.i18n.getMessage("viewersSuffix");
@@ -344,15 +392,10 @@ document.addEventListener("mouseover", e => {
         if (cached?.livestream?.thumbnail?.url) {
             const url = cached.livestream.thumbnail.url;
             previewImg.src = url + (url.includes('?') ? '&' : '?') + 't=' + Math.floor(Date.now() / 30000);
-            if (cached.user?.profile_pic) previewAvatar.src = cached.user.profile_pic;
         }
 
         getKickThumb(ch).then(url => {
-            if (previewCh === ch) {
-                previewImg.src = url;
-                const data = kickDataCache[ch];
-                if (data?.user?.profile_pic) previewAvatar.src = data.user.profile_pic;
-            }
+            if (previewCh === ch) previewImg.src = url;
         });
     } else {
         previewImg.src = getTwitchThumb(ch);
@@ -662,8 +705,12 @@ async function _render() {
         item.appendChild(handle);
 
         const img = document.createElement("img");
-        img.src = platform === "kick" ? `https://unavatar.io/twitter/${fav.channel}` : `https://unavatar.io/twitch/${fav.channel}`;
+        const favAvatarKey = `${platform}:${fav.channel}`;
+        const favCachedAvatar = avatarCache[favAvatarKey];
+        img.src = favCachedAvatar ? favCachedAvatar.url : svgAvatar(fav.channel, 30);
         img.onerror = () => { img.src = svgAvatar(fav.channel, 30); };
+        // Chama sempre (getAvatar decide via TTL se reusa cache ou rebusca)
+        getAvatar(fav.channel, platform).then(url => { if (url) img.src = url; });
         Object.assign(img.style, {
             width:"30px", height:"30px", borderRadius:"50%",
             objectFit:"cover", flexShrink:"0", marginRight:"10px"
