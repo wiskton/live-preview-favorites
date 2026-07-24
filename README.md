@@ -1,6 +1,6 @@
 # <img src="icons/icon128.png" align="center" width="40"> Live Preview + Favorites
 
-[![Version](https://img.shields.io/badge/version-4.1-blueviolet.svg)](#)
+[![Version](https://img.shields.io/badge/version-4.2-blueviolet.svg)](#)
 [![Manifest](https://img.shields.io/badge/manifest-v3-green.svg)](#)
 [![Platforms](https://img.shields.io/badge/platforms-Twitch%20%7C%20Kick-black.svg)](#)
 [![Languages](https://img.shields.io/badge/languages-7-informational.svg)](#)
@@ -31,7 +31,7 @@ A powerful extension for Chromium browsers that combines the best of **Twitch** 
 * **JavaScript (ES6+):** Core logic and DOM manipulation.
 * **Chrome Extension API (V3):** The most modern and secure standard for extensions.
 * **chrome.i18n API:** Automatic UI translation based on the browser's language.
-* **Decapi.me & Unavatar.io:** Metadata and avatar fetching.
+* **Decapi.me:** Twitch metadata and avatar fetching (no API key required).
 * **Inline CSS-in-JS:** The preview tooltip and sidebar are styled directly in `content.js` (no separate stylesheet).
 
 ---
@@ -68,6 +68,10 @@ A powerful extension for Chromium browsers that combines the best of **Twitch** 
 ---
 
 ## 📝 Changelog
+
+### 4.2
+* **Fix:** Avatars in the favorites sidebar and hover preview were silently failing for every channel — `unavatar.io` now requires an API key for anonymous requests (429 rate limit). Kick avatars now come from `user.profile_pic` on the channel API (already fetched for viewers/category/title); Twitch avatars come from `decapi.me/twitch/avatar`. Resolved avatar URLs are cached in `chrome.storage.local` for 1h to avoid hammering either API.
+* **Rename:** Store listing name updated to "Live Preview + Favorites (Twitch/Kick)" for clarity/discoverability.
 
 ### 4.1
 * **Fix:** Kick's sidebar markup changed (now a `<div id="sidebar-wrapper">` instead of `<aside>`/`<nav>`), so the favorites box was never being inserted there. Detection and insertion logic were rewritten against Kick's current DOM.
