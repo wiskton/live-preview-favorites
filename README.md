@@ -56,6 +56,8 @@ A powerful extension for Chromium browsers that combines the best of **Twitch** 
 | `popup.js` | Handles storage and logic for the popup interface. |
 | `icons/` | Folder containing logos in different sizes. |
 | `_locales/` | Translations (`messages.json`) per language, used by `chrome.i18n`. |
+| `imgs/` | Screenshots/promo images for the store listings — **not** part of the extension package. |
+| `scripts/build-store-zips.ps1` | Builds the Chrome Web Store / Firefox AMO submission zips into `dist/` (allow-list, so `imgs/`, `README.md`, `.git/` etc. never end up in the package). |
 
 > Note: `style.css` was removed — it was leftover from an earlier iframe-based preview and was never referenced by `manifest.json` or any page; the current hover preview is built entirely with inline styles in `content.js`.
 
