@@ -87,7 +87,7 @@ A powerful extension for Chromium browsers that combines the best of **Twitch** 
 
 If this extension is useful to you and you wish to support its continuous development, please consider making a **Bitcoin** donation. Any help is greatly appreciated!
 
-**Bitcoin Address (BTC):** `bc1qrluvyjkatg9lezrxewe2vqh4ew6z9vl7xw0s6k`
+**Bitcoin Address (BTC):** `bc1qmzde7n8xm45c03wjsf4nwjsx4p67ynugem9dr4`
 
 <p align="left">
   <img src="https://img.shields.io/badge/Donate-Bitcoin-orange?style=for-the-badge&logo=bitcoin" alt="Donate Bitcoin">
