@@ -994,6 +994,27 @@ function attachFavButton() {
     } catch {}
 }
 
+// ====================== AUTO-RELOAD EM ERRO DE REDE (Error #2000) ======================
+// A Twitch às vezes trava numa tela de erro genérica ("There was a network
+// error... Error #2000") que só se resolve dando F5. Detectamos o texto do
+// erro e simulamos o F5 automaticamente, com um cooldown pra não entrar num
+// loop de reload caso a rede realmente esteja fora do ar.
+const NETWORK_ERROR_PATTERN = /error #2000/i;
+const RELOAD_COOLDOWN_MS = 15000;
+
+function checkNetworkErrorAndReload() {
+    if (isKick) return; // Erro #2000 é específico da Twitch
+    if (!document.body || !NETWORK_ERROR_PATTERN.test(document.body.innerText)) return;
+
+    const lastReload = parseInt(sessionStorage.getItem("lpfLastErrorReload") || "0", 10);
+    if (Date.now() - lastReload < RELOAD_COOLDOWN_MS) return;
+
+    sessionStorage.setItem("lpfLastErrorReload", Date.now().toString());
+    location.reload();
+}
+
+setInterval(checkNetworkErrorAndReload, 3000);
+
 // ====================== INTERVALS ======================
 
 // FIX: Atualização completa a cada 5 minutos
