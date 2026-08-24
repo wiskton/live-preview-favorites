@@ -119,10 +119,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       : `https://www.twitch.tv/${fav.channel}`;
 
     const item = document.createElement('a');
-    item.href   = href;
-    item.target = '_blank';
-    item.rel    = 'noopener noreferrer';
+    item.href      = href;
+    item.target    = '_blank';
+    item.rel       = 'noopener noreferrer';
     item.className = 'channel-item';
+    item.draggable = true;
+    item.dataset.channel  = fav.channel;
+    item.dataset.platform = platform;
+
+    // Drag handle icon
+    const handle = document.createElement('span');
+    handle.className   = 'drag-handle';
+    handle.textContent = '⠿';
+    handle.title       = chrome.i18n.getMessage('dragToReorder');
+    item.appendChild(handle);
 
     // Avatar
     const img = document.createElement('img');
@@ -136,13 +146,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     infoDiv.className = 'channel-info';
 
     const nameDiv = document.createElement('div');
-    nameDiv.className = 'channel-name';
+    nameDiv.className   = 'channel-name';
     nameDiv.textContent = fav.channel;
     infoDiv.appendChild(nameDiv);
 
     if (info.game) {
       const metaDiv = document.createElement('div');
-      metaDiv.className = 'channel-meta';
+      metaDiv.className   = 'channel-meta';
       metaDiv.textContent = info.game;
       infoDiv.appendChild(metaDiv);
     }
@@ -156,11 +166,95 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Viewers
     const vSpan = document.createElement('span');
-    vSpan.className = 'viewers-text';
+    vSpan.className   = 'viewers-text';
     vSpan.textContent = formatViewers(info.viewers);
     item.appendChild(vSpan);
 
     return item;
+  }
+
+  // ── Drag & drop reorder ───────────────────────────────────────────────────
+  let dragSrc = null;
+
+  function addDragEvents(listEl, platform) {
+    listEl.addEventListener('dragstart', e => {
+      const item = e.target.closest('.channel-item');
+      if (!item) return;
+      dragSrc = item;
+      item.classList.add('dragging');
+      item._didDrag = true;
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    listEl.addEventListener('dragend', e => {
+      const item = e.target.closest('.channel-item');
+      if (!item) return;
+      item.classList.remove('dragging');
+      listEl.querySelectorAll('.channel-item').forEach(el => {
+        el.classList.remove('drag-over', 'kick-col');
+      });
+      dragSrc = null;
+    });
+
+    listEl.addEventListener('click', e => {
+      const item = e.target.closest('.channel-item');
+      if (item?._didDrag) { e.preventDefault(); item._didDrag = false; }
+    }, true);
+
+    listEl.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const item = e.target.closest('.channel-item');
+      if (!item || item === dragSrc) return;
+      listEl.querySelectorAll('.channel-item').forEach(el => el.classList.remove('drag-over', 'kick-col'));
+      item.classList.add('drag-over');
+      if (platform === 'kick') item.classList.add('kick-col');
+    });
+
+    listEl.addEventListener('dragleave', e => {
+      const item = e.target.closest('.channel-item');
+      if (item) item.classList.remove('drag-over', 'kick-col');
+    });
+
+    listEl.addEventListener('drop', e => {
+      e.preventDefault();
+      const target = e.target.closest('.channel-item');
+      if (!target || !dragSrc || target === dragSrc) return;
+      target.classList.remove('drag-over', 'kick-col');
+
+      // Reorder in DOM
+      const items = [...listEl.querySelectorAll('.channel-item')];
+      const fromIdx = items.indexOf(dragSrc);
+      const toIdx   = items.indexOf(target);
+      if (fromIdx < toIdx) target.after(dragSrc);
+      else target.before(dragSrc);
+
+      // Reorder in favorites storage
+      const newOrder = [...listEl.querySelectorAll('.channel-item')].map(el => el.dataset.channel);
+      chrome.storage.local.get(['favorites'], r => {
+        let favs = r.favorites || [];
+        // Extract items of this platform in new order, keep other platform untouched
+        const otherPlat = favs.filter(f => {
+          const p = f.platform || (f.url?.includes('kick.com') ? 'kick' : 'twitch');
+          return p !== platform;
+        });
+        const thisPlatSorted = newOrder.map(ch =>
+          favs.find(f => {
+            const p = f.platform || (f.url?.includes('kick.com') ? 'kick' : 'twitch');
+            return f.channel === ch && p === platform;
+          })
+        ).filter(Boolean);
+        // Rebuild: keep relative positions between platforms as before
+        const result = [];
+        let ti = 0, oi = 0;
+        favs.forEach(f => {
+          const p = f.platform || (f.url?.includes('kick.com') ? 'kick' : 'twitch');
+          if (p === platform) result.push(thisPlatSorted[ti++]);
+          else result.push(otherPlat[oi++]);
+        });
+        chrome.storage.local.set({ favorites: result });
+      });
+    });
   }
 
   // ── Load and render both columns ─────────────────────────────────────────
@@ -208,6 +302,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     online.forEach(({ fav, info }) => {
       listEl.appendChild(renderItem(fav, info, platform));
     });
+
+    addDragEvents(listEl, platform);
   }
 
   // Load both columns in parallel
