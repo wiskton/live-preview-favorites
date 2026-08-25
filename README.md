@@ -1,6 +1,6 @@
 # <img src="icons/icon128.png" align="center" width="40"> Live Preview + Favorites
 
-[![Version](https://img.shields.io/badge/version-4.2-blueviolet.svg)](#)
+[![Version](https://img.shields.io/badge/version-4.6-blueviolet.svg)](#)
 [![Manifest](https://img.shields.io/badge/manifest-v3-green.svg)](#)
 [![Platforms](https://img.shields.io/badge/platforms-Twitch%20%7C%20Kick-black.svg)](#)
 [![Languages](https://img.shields.io/badge/languages-7-informational.svg)](#)
@@ -70,6 +70,9 @@ A powerful extension for Chromium browsers that combines the best of **Twitch** 
 ---
 
 ## 📝 Changelog
+
+### 4.6
+* **New:** Hover preview in the popup — hovering over a favorite channel now shows a real-time live thumbnail, avatar, stream title, and viewer count, identical to the sidebar preview already present on Twitch/Kick pages.
 
 ### 4.2
 * **Fix:** Avatars in the favorites sidebar and hover preview were silently failing for every channel — `unavatar.io` now requires an API key for anonymous requests (429 rate limit). Kick avatars now come from `user.profile_pic` on the channel API (already fetched for viewers/category/title); Twitch avatars come from `decapi.me/twitch/avatar`. Resolved avatar URLs are cached in `chrome.storage.local` for 1h to avoid hammering either API.
