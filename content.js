@@ -479,8 +479,9 @@ function getOrCreateFavBox(sidebar) {
     const headerLabel = document.createElement("span");
     headerLabel.textContent = chrome.i18n.getMessage("favoritesLabel");
     Object.assign(headerLabel.style, {
-        color:"#bf94ff", fontWeight:"700", fontSize:"11px",
-        letterSpacing:"1.5px", textTransform:"uppercase"
+        color: isKick ? "#53fc18" : "#bf94ff",
+        fontWeight: "700", fontSize: "11px",
+        letterSpacing: "1.5px", textTransform: "uppercase"
     });
 
     header.appendChild(headerLabel);
@@ -649,10 +650,12 @@ async function _render() {
         item.onmouseenter = () => {
             item.style.background  = "rgba(255,255,255,0.07)";
             handle.style.opacity   = "1";
+            handle.style.color     = isKick ? "rgba(83,252,24,0.8)" : "rgba(191,148,255,0.8)";
         };
         item.onmouseleave = () => {
             item.style.background  = "transparent";
             handle.style.opacity   = "0";
+            handle.style.color     = "rgba(255,255,255,0.3)";
         };
 
         item.ondragstart = e => {
@@ -675,8 +678,8 @@ async function _render() {
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
             if (dragChannel && !sameFav(fav, dragChannel.channel, dragChannel.platform)) {
-                item.style.boxShadow = "inset 0 2px 0 0 #9147ff";
-                item.style.background = "rgba(145,71,255,0.10)";
+                item.style.boxShadow = isKick ? "inset 0 2px 0 0 #53fc18" : "inset 0 2px 0 0 #9147ff";
+                item.style.background = isKick ? "rgba(83,252,24,0.10)" : "rgba(145,71,255,0.10)";
             }
         };
         item.ondragleave = () => {

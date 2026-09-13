@@ -1,6 +1,6 @@
 # <img src="icons/icon128.png" align="center" width="40"> Live Preview + Favorites
 
-[![Version](https://img.shields.io/badge/version-4.6-blueviolet.svg)](#)
+[![Version](https://img.shields.io/badge/version-4.7-blueviolet.svg)](#)
 [![Manifest](https://img.shields.io/badge/manifest-v3-green.svg)](#)
 [![Platforms](https://img.shields.io/badge/platforms-Twitch%20%7C%20Kick-black.svg)](#)
 [![Languages](https://img.shields.io/badge/languages-7-informational.svg)](#)
@@ -70,6 +70,10 @@ A powerful extension for Chromium browsers that combines the best of **Twitch** 
 ---
 
 ## 📝 Changelog
+
+### 4.7
+* **Compact Hover Preview (Popup):** O preview ao passar o mouse no popup da extensão foi reduzido em ~55% de tamanho (210px de largura e 118px de altura), encaixando-se perfeitamente na coluna do canal sem obstruir as outras plataformas, com posicionamento inteligente que nunca vaza da janela e borda temática por plataforma (Twitch roxo / Kick verde).
+* **Kick Branding (Sidebar & Drag & Drop):** O cabeçalho "FAVORITOS" injetado na sidebar da Kick agora utiliza a cor verde neon oficial da plataforma (`#53fc18`) em vez do roxo da Twitch. A linha indicadora e o ícone de reordenação ao puxar/arrastar streamers na Kick agora também acendem em verde neon.
 
 ### 4.6
 * **New:** Hover preview in the popup — hovering over a favorite channel now shows a real-time live thumbnail, avatar, stream title, and viewer count, identical to the sidebar preview already present on Twitch/Kick pages.

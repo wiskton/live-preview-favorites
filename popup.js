@@ -92,10 +92,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const hoverPreview = document.createElement('div');
   Object.assign(hoverPreview.style, {
     position: 'fixed',
-    width: '320px',
+    width: '210px',
     border: 'none',
-    borderRadius: '10px',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.85)',
+    borderRadius: '8px',
+    boxShadow: '0 8px 24px rgba(0,0,0,0.9), 0 2px 6px rgba(0,0,0,0.5)',
     display: 'none',
     pointerEvents: 'none',
     zIndex: '999999',
@@ -107,24 +107,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const hpImg = document.createElement('img');
   Object.assign(hpImg.style, {
-    width: '320px', height: '180px', objectFit: 'cover',
-    display: 'block', borderRadius: '10px 10px 0 0', transition: 'opacity 0.15s',
+    width: '210px', height: '118px', objectFit: 'cover',
+    display: 'block', borderRadius: '8px 8px 0 0', transition: 'opacity 0.15s',
   });
   hoverPreview.appendChild(hpImg);
 
   const hpInfo = document.createElement('div');
   Object.assign(hpInfo.style, {
-    display: 'flex', alignItems: 'center', gap: '8px',
-    padding: '8px 10px', background: 'rgba(18,18,24,0.98)',
-    borderRadius: '0 0 10px 10px',
+    display: 'flex', alignItems: 'center', gap: '6px',
+    padding: '5px 8px', background: 'rgba(18,18,24,0.98)',
+    borderRadius: '0 0 8px 8px',
   });
   hoverPreview.appendChild(hpInfo);
 
   const hpAvatar = document.createElement('img');
   Object.assign(hpAvatar.style, {
-    width: '30px', height: '30px', borderRadius: '50%',
+    width: '22px', height: '22px', borderRadius: '50%',
     objectFit: 'cover', flexShrink: '0',
-    border: '2px solid rgba(255,255,255,0.15)',
+    border: '1.5px solid rgba(255,255,255,0.15)',
   });
   hpInfo.appendChild(hpAvatar);
 
@@ -134,27 +134,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const hpName = document.createElement('span');
   Object.assign(hpName.style, {
-    color: '#fff', fontWeight: '700', fontSize: '13px',
+    color: '#fff', fontWeight: '700', fontSize: '11px',
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
   });
   hpText.appendChild(hpName);
 
   const hpTitle = document.createElement('span');
   Object.assign(hpTitle.style, {
-    color: '#efeff1', fontSize: '11px', marginTop: '1px',
+    color: '#efeff1', fontSize: '10px', marginTop: '1px',
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
   });
   hpText.appendChild(hpTitle);
 
   const hpSub = document.createElement('span');
-  Object.assign(hpSub.style, { color: '#adadb8', fontSize: '11px', marginTop: '1px' });
+  Object.assign(hpSub.style, { color: '#adadb8', fontSize: '9.5px', marginTop: '1px' });
   hpText.appendChild(hpSub);
 
   const hpBadge = document.createElement('span');
   Object.assign(hpBadge.style, {
     marginLeft: 'auto', background: '#eb0400', color: '#fff',
-    fontSize: '10px', fontWeight: '700', padding: '2px 6px',
-    borderRadius: '5px', letterSpacing: '0.5px', flexShrink: '0',
+    fontSize: '9px', fontWeight: '700', padding: '1px 5px',
+    borderRadius: '4px', letterSpacing: '0.4px', flexShrink: '0',
   });
   hpBadge.textContent = '🔴 LIVE';
   hpInfo.appendChild(hpBadge);
@@ -166,6 +166,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     clearTimeout(hpHideTimer);
     hpCurrentCh = ch;
 
+    // Borda com acento de cor da plataforma (Twitch roxo / Kick verde)
+    hoverPreview.style.border = platform === 'kick'
+      ? '1px solid rgba(83, 252, 24, 0.4)'
+      : '1px solid rgba(145, 71, 255, 0.45)';
+
     // Thumbnail placeholder
     hpImg.style.opacity = '0.4';
     hpImg.src = svgThumb(ch);
@@ -173,8 +178,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     hpImg.onload  = () => { hpImg.style.opacity = '1'; };
 
     // Avatar
-    hpAvatar.src = info.avatar || svgAvatar(ch, 30);
-    hpAvatar.onerror = () => { hpAvatar.src = svgAvatar(ch, 30); };
+    hpAvatar.src = info.avatar || svgAvatar(ch, 22);
+    hpAvatar.onerror = () => { hpAvatar.src = svgAvatar(ch, 22); };
 
     // Nome e viewers
     hpName.textContent  = ch;
@@ -206,16 +211,26 @@ document.addEventListener('DOMContentLoaded', async () => {
       hpImg.src = getTwitchThumb(ch);
     }
 
-    // Posicionamento: aparece acima do item, alinhado à esquerda do popup
+    // Posicionamento compacto e inteligente dentro da janela do popup
     hoverPreview.style.display = 'flex';
     const rect = item.getBoundingClientRect();
-    const previewH = 180 + 58; // img + info
-    let top = rect.top - previewH - 8;
-    if (top < 4) top = rect.bottom + 8; // se não cabe acima, vai abaixo
+    const previewW = 210;
+    const previewH = 160;
+
     let left = rect.left;
-    // Garante que não sai da janela (popup tem 480px de largura, preview 320px)
-    if (left + 320 > window.innerWidth) left = window.innerWidth - 324;
-    if (left < 4) left = 4;
+    if (left + previewW > window.innerWidth - 6) {
+      left = window.innerWidth - previewW - 6;
+    }
+    if (left < 6) left = 6;
+
+    let top = rect.top - previewH - 6;
+    if (top < 6) {
+      top = rect.bottom + 6;
+    }
+    if (top + previewH > window.innerHeight - 6) {
+      top = window.innerHeight - previewH - 6;
+    }
+    if (top < 6) top = 6;
 
     hoverPreview.style.top  = top  + 'px';
     hoverPreview.style.left = left + 'px';
