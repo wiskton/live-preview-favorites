@@ -52,8 +52,8 @@ chrome.storage.onChanged.addListener((changes) => {
     }
 });
 
-watchNativeSidebarToggle();
 const isKick = location.hostname.includes("kick.com");
+watchNativeSidebarToggle();
 
 // Deriva a plataforma de um favorito (fallback pela URL para favoritos antigos sem o campo)
 function getPlat(f) {
@@ -457,8 +457,24 @@ function getLeftSidebar() {
     return null;
 }
 
+// A Kick recolhe uma div, não um nav/aside. Acompanhe a largura real,
+// inclusive quando o layout muda sem clicar em um botão com aria-label.
+let kickSidebarObserver = null;
+let observedKickSidebar = null;
+function watchKickSidebar(sidebar) {
+    if (!isKick || observedKickSidebar === sidebar) return;
+    kickSidebarObserver?.disconnect();
+    observedKickSidebar = sidebar;
+    kickSidebarObserver = new ResizeObserver(() => {
+        const box = sidebar.querySelector("[data-favorites-box='twitch']");
+        if (box) applyCollapsedMode(box);
+    });
+    kickSidebarObserver.observe(sidebar);
+}
+
 // ====================== OBTER OU CRIAR favBox (sem duplicar) ======================
 function getOrCreateFavBox(sidebar) {
+    watchKickSidebar(sidebar);
     const all = document.querySelectorAll("[data-favorites-box='twitch']");
     if (all.length > 1) {
         for (let i = 1; i < all.length; i++) all[i].remove();
@@ -477,6 +493,7 @@ function getOrCreateFavBox(sidebar) {
     Object.assign(header.style, { padding: isKick ? "10px 15px" : "16px 16px 8px" });
 
     const headerLabel = document.createElement("span");
+    headerLabel.dataset.favLabel = "true";
     headerLabel.textContent = chrome.i18n.getMessage("favoritesLabel");
     Object.assign(headerLabel.style, {
         color: isKick ? "#53fc18" : "#bf94ff",
@@ -506,6 +523,7 @@ function getOrCreateFavBox(sidebar) {
 
 // ====================== DETECTAR BOTÃO NATIVO DO TWITCH ======================
 function watchNativeSidebarToggle() {
+    if (isKick) return; // A largura é acompanhada pelo ResizeObserver.
     const COLLAPSE_LABELS = ["recolher", "collapse", "fechar", "close nav", "hide", "ocultar"];
     const EXPAND_LABELS   = ["expandir", "expand",   "abrir",  "open nav",  "show", "mostrar"];
 
@@ -537,8 +555,17 @@ function watchNativeSidebarToggle() {
 function applyCollapsedMode(box) {
     const header = box.querySelector("[data-fav-header]") || box.firstElementChild;
 
-    if (favCollapsed) {
-        if (header) header.style.display = "none";
+    const sidebarWidth = isKick ? observedKickSidebar?.getBoundingClientRect().width : 0;
+    const collapsed = isKick ? sidebarWidth > 0 && sidebarWidth < 100 : favCollapsed;
+    if (isKick && header) {
+        header.style.padding = collapsed ? "10px 0" : "10px 15px";
+        header.style.textAlign = collapsed ? "center" : "";
+        const label = header.querySelector("[data-fav-label]");
+        if (label) label.textContent = collapsed ? "FAV" : chrome.i18n.getMessage("favoritesLabel");
+    }
+
+    if (collapsed) {
+        if (header) header.style.display = isKick ? "" : "none";
 
         box.querySelectorAll("[data-fav]").forEach(item => {
             item.draggable = false;
@@ -659,6 +686,7 @@ async function _render() {
         };
 
         item.ondragstart = e => {
+            if (!item.draggable) { e.preventDefault(); return; }
             dragChannel = { channel: fav.channel, platform };
             item.style.opacity   = "0.45";
             item.style.transform = "scale(0.97)";
@@ -668,13 +696,15 @@ async function _render() {
         item.ondragend = () => {
             item.style.opacity   = "1";
             item.style.transform = "scale(1)";
-            item.style.cursor    = "grab";
+            item.style.cursor    = item.draggable ? "grab" : "pointer";
+            dragChannel = null;
             favBox.querySelectorAll("[data-fav]").forEach(el => {
                 el.style.boxShadow = "none";
                 el.style.background = "transparent";
             });
         };
         item.ondragover = e => {
+            if (!item.draggable) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
             if (dragChannel && !sameFav(fav, dragChannel.channel, dragChannel.platform)) {
@@ -687,6 +717,7 @@ async function _render() {
             item.style.background = "transparent";
         };
         item.ondrop = e => {
+            if (!item.draggable) return;
             e.preventDefault();
             item.style.boxShadow = "none";
             item.style.background = "transparent";
